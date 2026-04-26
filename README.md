@@ -1,45 +1,105 @@
-# Merkezi Sismik Ağ - Telefon İvmeölçer Tabanlı Deprem Tespit Sistemi
+# SismoNetwork — Telefon Tabanlı Deprem Erken Uyarı Sistemi
 
-Android telefonların ivmeölçerlerinden gelen gerçek zamanlı verileri analiz eden, resmi deprem verileriyle (USGS ve EMSC) eşleştiren ve erken deprem uyarısı sağlayan bir sistem.
+Android telefonların ivmeölçerlerinden gelen gerçek zamanlı verileri analiz eden, küresel deprem verileriyle (USGS, EMSC, KOERI, AFAD) eşleştiren ve erken uyarı sağlayan açık kaynaklı bir deprem ağı.
+
+> 🌐 **Canlı backend:** `https://seismic.meruto.com.tr`  
+> 📱 **Android app:** Expo Go ile test edilebilir, APK build yakında  
+> 🖥️ **Windows app:** Planlanıyor (Electron + Fluent UI)
+
+---
 
 ## 🎯 Özellikler
 
-- ✅ **Gerçek Zamanlı Veri Alımı**: WebSocket üzerinden Android telefon ivmeölçer verilerini kabul eder
-- ✅ **Çift Katmanlı P-Dalgası Tespiti**: 
-  - Basit eşik kontrolü (> 0.1g)
-  - STA/LTA (Short-Term Average / Long-Term Average) algoritması
-- ✅ **Esnek Geofencing**: Hem koordinat bazlı (50 km yarıçap) hem de bölge ID bazlı gruplandırma
-- ✅ **Resmi Deprem Verisi Entegrasyonu**: USGS ve EMSC API'lerinden veri toplama
-- ✅ **Akıllı Eşleştirme**: Yerel sensör verileriyle resmi deprem verilerini karşılaştırma
-- ✅ **Erken Uyarı Sistemi**: Resmi doğrulama öncesi uyarı üretme
-- ✅ **REST API**: Durum sorgulama ve veri erişimi için HTTP endpoints
-- 🔮 **Gelecek**: [GlobalQuake.net](https://globalquake.net/) API entegrasyonu planlanıyor
+### Backend
+- ✅ **Gerçek Zamanlı Sensör Alımı** — WebSocket üzerinden çoklu cihaz desteği
+- ✅ **Çift Katmanlı Deprem Tespiti** — Basit eşik + STA/LTA algoritması
+- ✅ **Geofencing** — 50 km yarıçap + bölge ID bazlı gruplama
+- ✅ **Küresel Veri Kaynakları** — USGS, EMSC, KOERI, AFAD entegrasyonu
+- ✅ **Akıllı Eşleştirme** — Sensör verileri ile resmi deprem verilerini karşılaştırır
+- ✅ **Erken Uyarı** — Resmi doğrulama öncesi uyarı üretir
+- ✅ **REST API + WebSocket** — Cihazlar, olaylar, uyarılar, canlı sensör özeti
+- ✅ **Web Dashboard** — Leaflet harita, canlı cihaz ve deprem listesi
+- ✅ **Chat** — WebSocket üzerinden anlık mesajlaşma (flood koruması dahil)
+- ✅ **Manuel Rapor** — `/report` endpoint'i ile sarsıntı raporu alma
+
+### Android Uygulaması
+- ✅ **Material You Tema** — Sistem renk paletine uyum (Android 12+)
+- ✅ **4 Sekme:** Uyarılar / Deprem Listesi / Rapor / Ayarlar+Chat
+- ✅ **Canlı Sensör İzleme** — İvmeölçer verisi WebSocket ile sunucuya aktarılır
+- ✅ **GPS Bölge Tespiti** — Konum bazlı otomatik `region_id`
+- ✅ **Deprem Listesi** — Kaynak filtresi, büyüklük renk skalası, konuma mesafe
+- ✅ **MMI Sarsıntı Raporu** — II–VII Mercalli skalası ile manuel rapor
+- ✅ **Alarm Özelleştirme** — Minimum büyüklük eşiği, mesafe filtresi, bildirim tipi
+- ✅ **Sohbet** — Gerçek zamanlı mesajlaşma, küfür filtresi, flood koruması
+
+---
+
+## 🏗️ Mimari
+
+```
+seismic-network/
+├── main.py              # FastAPI backend, WebSocket, REST API
+├── analysis.py          # STA/LTA sinyal işleme, geofencing
+├── models.py            # SQLAlchemy veritabanı modelleri
+├── global_sync.py       # USGS + EMSC senkronizasyonu
+├── koeri_sync.py        # KOERI (Kandilli) senkronizasyonu
+├── afad_sync.py         # AFAD senkronizasyonu
+├── config.py            # Yapılandırma
+└── android-app/
+    ├── App.tsx           # Tab navigation + Material You tema
+    ├── context/
+    │   └── SeismicContext.tsx  # WebSocket, sensör, chat, ayarlar
+    └── screens/
+        ├── AlertsScreen.tsx    # Uyarılar + ağ durumu
+        ├── QuakeListScreen.tsx # Küresel deprem listesi
+        ├── ReportScreen.tsx    # MMI sarsıntı raporu
+        └── SettingsScreen.tsx  # Ayarlar + sohbet
+```
+
+---
 
 ## 📋 Gereksinimler
 
-### Backend Sunucu (Bu Proje)
+### Backend
 - Python 3.9+
-- pip
+- Ubuntu 22.04+ (VDS/VPS önerilir)
 
-### Android Uygulama (android-app/ klasörü)
+### Android Uygulaması
 - Node.js 18+
-- React Native CLI
-- Android Studio
-- Android SDK (API 24+)
+- Expo CLI (`npm install -g expo-cli`)
+- Expo Go uygulaması (test için)
+
+---
 
 ## 🚀 Kurulum
 
-1. **Bağımlılıkları yükleyin:**
+### Backend
+
 ```bash
 pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-2. **Sunucuyu başlatın:**
+### Android Uygulaması
+
 ```bash
-python main.py
+cd android-app
+npm install
+npx expo start --lan
 ```
 
-Sunucu varsayılan olarak `http://0.0.0.0:8000` adresinde çalışacaktır.
+Expo Go ile QR kodu tara.
+
+---
+
+## 🔮 Yol Haritası
+
+- [ ] APK / standalone build (EAS Build)
+- [ ] Windows masaüstü uygulaması (Electron + Fluent UI)
+- [ ] Çoklu cihaz yönetim paneli
+- [ ] Ülke bazlı chat odaları
+- [ ] INGV, GFZ ek veri kaynakları
+- [ ] iOS desteği
 
 ## 📡 API Kullanımı
 
