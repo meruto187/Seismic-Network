@@ -1,77 +1,75 @@
-# SismoNetwork — Telefon Tabanlı Deprem Erken Uyarı Sistemi
+# SismoNetwork — Phone-Based Earthquake Early Warning System
 
-Android telefonların ivmeölçerlerinden gelen gerçek zamanlı verileri analiz eden, küresel deprem verileriyle (USGS, EMSC, KOERI, AFAD) eşleştiren ve erken uyarı sağlayan açık kaynaklı bir deprem ağı.
+An open-source distributed earthquake detection network that analyzes real-time accelerometer data from Android phones, cross-references it with global seismic data (USGS, EMSC, KOERI, AFAD), and sends early warnings before official confirmation.
 
-> 🌐 **Canlı backend:** `https://seismic.meruto.com.tr`  
-> 📱 **Android app:** Expo Go ile test edilebilir, APK build yakında  
-> 🖥️ **Windows app:** Planlanıyor (Electron + Fluent UI)
+> 📱 **Android app:** Testable via Expo Go — standalone APK coming soon  
+> 🖥️ **Windows app:** Planned (Electron + Fluent UI)
 
 ---
 
-## 🎯 Özellikler
+## Features
 
 ### Backend
-- ✅ **Gerçek Zamanlı Sensör Alımı** — WebSocket üzerinden çoklu cihaz desteği
-- ✅ **Çift Katmanlı Deprem Tespiti** — Basit eşik + STA/LTA algoritması
-- ✅ **Geofencing** — 50 km yarıçap + bölge ID bazlı gruplama
-- ✅ **Küresel Veri Kaynakları** — USGS, EMSC, KOERI, AFAD entegrasyonu
-- ✅ **Akıllı Eşleştirme** — Sensör verileri ile resmi deprem verilerini karşılaştırır
-- ✅ **Erken Uyarı** — Resmi doğrulama öncesi uyarı üretir
-- ✅ **REST API + WebSocket** — Cihazlar, olaylar, uyarılar, canlı sensör özeti
-- ✅ **Web Dashboard** — Leaflet harita, canlı cihaz ve deprem listesi
-- ✅ **Chat** — WebSocket üzerinden anlık mesajlaşma (flood koruması dahil)
-- ✅ **Manuel Rapor** — `/report` endpoint'i ile sarsıntı raporu alma
+- ✅ **Real-time sensor ingestion** — multi-device WebSocket support
+- ✅ **Two-layer earthquake detection** — simple threshold + STA/LTA algorithm
+- ✅ **Geofencing** — 50 km radius clustering + region ID grouping
+- ✅ **Global data sources** — USGS, EMSC, KOERI, AFAD integration
+- ✅ **Smart matching** — correlates local sensor triggers with official data
+- ✅ **Early warning** — alerts sent before official confirmation
+- ✅ **REST API + WebSocket** — devices, events, alerts, live sensor summary
+- ✅ **Web dashboard** — Leaflet map, live device list, earthquake feed
+- ✅ **Chat** — real-time messaging over WebSocket (flood protection included)
+- ✅ **Manual reports** — `/report` endpoint for felt-earthquake reports (MMI scale)
 
-### Android Uygulaması
-- ✅ **Material You Tema** — Sistem renk paletine uyum (Android 12+)
-- ✅ **4 Sekme:** Uyarılar / Deprem Listesi / Rapor / Ayarlar+Chat
-- ✅ **Canlı Sensör İzleme** — İvmeölçer verisi WebSocket ile sunucuya aktarılır
-- ✅ **GPS Bölge Tespiti** — Konum bazlı otomatik `region_id`
-- ✅ **Deprem Listesi** — Kaynak filtresi, büyüklük renk skalası, konuma mesafe
-- ✅ **MMI Sarsıntı Raporu** — II–VII Mercalli skalası ile manuel rapor
-- ✅ **Alarm Özelleştirme** — Minimum büyüklük eşiği, mesafe filtresi, bildirim tipi
-- ✅ **Sohbet** — Gerçek zamanlı mesajlaşma, küfür filtresi, flood koruması
+### Android App
+- ✅ **Material You theme** — adapts to system color palette (Android 12+)
+- ✅ **4 tabs:** Alerts / Earthquake List / Report / Settings + Chat
+- ✅ **Live sensor monitoring** — accelerometer data streamed to server
+- ✅ **GPS region detection** — automatic `region_id` from location
+- ✅ **Earthquake list** — source filter, magnitude color scale, distance from user
+- ✅ **MMI felt report** — Mercalli scale II–VII manual report submission
+- ✅ **Alert customization** — minimum magnitude threshold, distance filter, notification types
+- ✅ **Chat** — real-time messaging, profanity filter, flood protection (3 msg/10s)
 
 ---
 
-## 🏗️ Mimari
+## Architecture
 
 ```
 seismic-network/
-├── main.py              # FastAPI backend, WebSocket, REST API
-├── analysis.py          # STA/LTA sinyal işleme, geofencing
-├── models.py            # SQLAlchemy veritabanı modelleri
-├── global_sync.py       # USGS + EMSC senkronizasyonu
-├── koeri_sync.py        # KOERI (Kandilli) senkronizasyonu
-├── afad_sync.py         # AFAD senkronizasyonu
-├── config.py            # Yapılandırma
+├── main.py                    # FastAPI server, WebSocket manager, REST API
+├── analysis.py                # STA/LTA signal processing, geofencing
+├── models.py                  # SQLAlchemy database models
+├── global_sync.py             # USGS + EMSC sync
+├── koeri_sync.py              # KOERI (Kandilli Observatory) sync
+├── afad_sync.py               # AFAD sync
+├── config.py                  # Configuration
 └── android-app/
-    ├── App.tsx           # Tab navigation + Material You tema
+    ├── App.tsx                # Tab navigation + Material You theme
     ├── context/
-    │   └── SeismicContext.tsx  # WebSocket, sensör, chat, ayarlar
+    │   └── SeismicContext.tsx # WebSocket, sensor, chat, settings state
     └── screens/
-        ├── AlertsScreen.tsx    # Uyarılar + ağ durumu
-        ├── QuakeListScreen.tsx # Küresel deprem listesi
-        ├── ReportScreen.tsx    # MMI sarsıntı raporu
-        └── SettingsScreen.tsx  # Ayarlar + sohbet
+        ├── AlertsScreen.tsx   # Alerts + network status + live sensor
+        ├── QuakeListScreen.tsx# Global earthquake list
+        ├── ReportScreen.tsx   # MMI felt report
+        └── SettingsScreen.tsx # Settings + chat
 ```
 
 ---
 
-## 📋 Gereksinimler
+## Requirements
 
 ### Backend
 - Python 3.9+
-- Ubuntu 22.04+ (VDS/VPS önerilir)
+- Ubuntu 22.04+ (VPS recommended)
 
-### Android Uygulaması
+### Android App
 - Node.js 18+
-- Expo CLI (`npm install -g expo-cli`)
-- Expo Go uygulaması (test için)
+- Expo Go app (for testing)
 
 ---
 
-## 🚀 Kurulum
+## Setup
 
 ### Backend
 
@@ -80,7 +78,7 @@ pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-### Android Uygulaması
+### Android App
 
 ```bash
 cd android-app
@@ -88,265 +86,103 @@ npm install
 npx expo start --lan
 ```
 
-Expo Go ile QR kodu tara.
+Scan the QR code with Expo Go.
 
 ---
 
-## 🔮 Yol Haritası
+## API Reference
 
-- [ ] APK / standalone build (EAS Build)
-- [ ] Windows masaüstü uygulaması (Electron + Fluent UI)
-- [ ] Çoklu cihaz yönetim paneli
-- [ ] Ülke bazlı chat odaları
-- [ ] INGV, GFZ ek veri kaynakları
-- [ ] iOS desteği
+### WebSocket
 
-## 📡 API Kullanımı
-
-### WebSocket Bağlantısı (Android Uygulaması İçin)
-
-React Native Android uygulamasından WebSocket bağlantısı kurun:
-
-```javascript
-// Sunucu IP adresinizi kullanın (localhost değil!)
-const ws = new WebSocket('ws://YOUR_SERVER_IP:8000/ws/sensor/DEVICE_ID');
-
-// Veri gönderme
-ws.send(JSON.stringify({
-    timestamp: new Date().toISOString(),
-    x: 0.05,  // m/s²
-    y: 0.03,  // m/s²
-    z: 9.81,  // m/s²
-    latitude: 41.0082,
-    longitude: 28.9784,
-    region_id: "istanbul-fatih"
-}));
-
-// Yanıt alma
-ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    console.log('Magnitude:', data.magnitude);
-    console.log('Triggered:', data.triggered);
-};
+```
+wss://YOUR_SERVER/ws/sensor/{device_id}
 ```
 
-### REST API Endpoints
-
-#### Sistem Durumu
-```bash
-GET /status
-```
-
-Yanıt:
+**Send sensor data:**
 ```json
 {
-    "active_devices": 15,
-    "total_devices": 42,
-    "total_sensor_data": 125847,
-    "active_alerts": 2,
-    "local_events": 8,
-    "global_events": 156,
-    "websocket_connections": 15
+  "type": "sensor_data",
+  "x": 0.05, "y": 0.03, "z": 9.81,
+  "latitude": 41.0082, "longitude": 28.9784,
+  "region_id": "turkey_istanbul",
+  "timestamp": "2024-03-19T20:00:00Z"
 }
 ```
 
-#### Uyarıları Görüntüleme
-```bash
-GET /alerts?active_only=true&limit=50
+**Send chat message:**
+```json
+{ "type": "chat", "text": "Hello!", "timestamp": "..." }
 ```
 
-#### Cihazları Listeleme
-```bash
-GET /devices?active_only=true
-```
+### REST Endpoints
 
-#### Olayları Görüntüleme
-```bash
-GET /events?event_type=all&limit=50
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/status` | Network status, device count |
+| GET | `/devices` | Registered devices |
+| GET | `/events` | Local + global earthquake events |
+| GET | `/alerts` | Generated alerts |
+| POST | `/report` | Submit a felt-earthquake report |
 
-Event types: `all`, `local`, `global`
+---
 
-#### Uyarıyı Çözümleme
-```bash
-POST /alerts/{alert_id}/resolve
-```
+## Detection Logic
 
-## 🔍 Tespit Mantığı
+### Two-Layer Detection
 
-### P-Dalgası Analizi
+| Layer | Method | Threshold |
+|-------|--------|-----------|
+| 1 | Simple threshold | vector magnitude > 0.1g |
+| 2 | STA/LTA | ratio > 3.0 (STA: 1s, LTA: 30s) |
 
-**1. Basit Eşik Kontrolü:**
-- Vektör büyüklüğü: `magnitude = √(x² + y² + z²)`
-- Eşik: `> 0.1g (0.98 m/s²)`
+### Geofencing Rules
 
-**2. STA/LTA Algoritması:**
-- STA penceresi: 1 saniye
-- LTA penceresi: 30 saniye
-- Tetikleme oranı: `STA/LTA > 3.0`
+- Time window: 5 seconds
+- Minimum devices: 3+
+- Radius: 50 km (Haversine)
 
-### Geofencing Kuralları
+### Alert Decision Matrix
 
-- **Zaman penceresi**: 5 saniye içinde
-- **Minimum cihaz**: 3+ cihaz
-- **Koordinat bazlı**: Haversine formülü ile 50 km yarıçap
-- **Bölge ID bazlı**: Aynı `region_id` değeri
+| Local Sensors | Official Data | Result |
+|---------------|---------------|--------|
+| ✅ Triggered | ❌ No data yet | **EARLY WARNING** (orange) |
+| ✅ Triggered | ✅ Matched | **CONFIRMED EARTHQUAKE** (red) |
+| ❌ Silent | ✅ Official data | **DISTANT EARTHQUAKE** (blue) |
 
-### Karar Matrisi
+---
 
-| Durum | Yerel Sensörler | Resmi Veri (USGS/EMSC) | Sonuç |
-|-------|----------------|------------------------|-------|
-| 1 | ✅ Tetiklendi | ❌ Veri yok | **ERKEN UYARI** (Turuncu) |
-| 2 | ✅ Tetiklendi | ✅ Eşleşti | **DOĞRULANMIŞ DEPREM** (Kırmızı) |
-| 3 | ❌ Sessiz | ✅ Vari var | **UZAK DEPREM** (Mavi) |
-| 4 | ❌ Sessiz | ❌ Veri yok | Normal durum |
+## Configuration
 
-### Eşleştirme Kriterleri
-
-- **Zaman toleransı**: ±2 dakika
-- **Mesafe toleransı**: 100 km yarıçap
-- **Minimum resmi veri magnitude**: M ≥ 2.5
-
-## 🗄️ Veritabanı Şeması
-
-Sistem SQLite kullanır ve aşağıdaki tabloları içerir:
-
-- `devices` - Kayıtlı cihazlar
-- `sensor_data` - Ham ivme verileri
-- `local_events` - Yerel tespit edilen olaylar
-- `global_events` - USGS ve EMSC'den çekilen depremler
-- `alerts` - Üretilen uyarılar
-
-## ⚙️ Konfigürasyon
-
-`config.py` dosyasında ayarları değiştirebilirsiniz:
+Edit `config.py`:
 
 ```python
-THRESHOLD_SIMPLE_G = 0.1              # Basit eşik (g cinsinden)
-STA_LTA_TRIGGER_RATIO = 3.0           # STA/LTA tetikleme oranı
-GEOFENCING_RADIUS_KM = 50.0           # Geofencing yarıçapı
-TIME_WINDOW_SECONDS = 5               # Zaman penceresi
-MIN_DEVICES_FOR_TRIGGER = 3           # Minimum cihaz sayısı
-GLOBAL_SYNC_INTERVAL_SECONDS = 30     # Resmi veri senkronizasyon aralığı
+THRESHOLD_SIMPLE_G = 0.1          # Simple threshold (g)
+STA_LTA_TRIGGER_RATIO = 3.0       # STA/LTA trigger ratio
+GEOFENCING_RADIUS_KM = 50.0       # Clustering radius
+TIME_WINDOW_SECONDS = 5           # Detection time window
+MIN_DEVICES_FOR_TRIGGER = 3       # Minimum devices to confirm event
 ```
-
-## 📊 Örnek Kullanım Senaryosu
-
-1. **Başlangıç**: 15 Android telefon uygulaması WebSocket ile bağlanır
-2. **Normal Durum**: Telefonlar sürekli x, y, z ivme verisi gönderir
-3. **Sarsıntı**: İstanbul'da 5 telefon eşik üstü ivme tespit eder
-4. **Tetikleme**: 5 saniye içinde 5 cihaz > 3 cihaz kuralını karşılar
-5. **Yerel Olay**: Sistem "POTANSİYEL DEPREM" oluşturur
-6. **Resmi Veri Kontrolü**: USGS/EMSC'de henüz veri yok
-7. **ERKEN UYARI**: Tüm bağlı cihazlara turuncu uyarı gönderilir
-8. **Doğrulama**: 45 saniye sonra USGS M4.2 deprem kaydeder
-9. **Eşleştirme**: Sistem yerel olay ile USGS verisini eşleştirir
-10. **DOĞRULANMIŞ DEPREM**: Kırmızı uyarı güncellenir
-
-## 🔧 Geliştirme
-
-### Proje Yapısı
-
-```
-seismic-network/
-├── main.py              # FastAPI sunucusu ve WebSocket yönetimi
-├── analysis.py          # Sinyal işleme ve P-dalgası tespiti
-├── global_sync.py       # USGS ve EMSC entegrasyonu
-├── models.py            # SQLAlchemy veritabanı modelleri
-├── config.py            # Sistem konfigürasyonu
-├── requirements.txt     # Python bağımlılıkları
-└── README.md           # Bu dosya
-```
-
-### Loglama
-
-Sistem `INFO` seviyesinde log üretir. Log seviyesini değiştirmek için:
-
-```bash
-export LOG_LEVEL=DEBUG
-python main.py
-```
-
-## 🌐 Resmi Deprem Veri Kaynakları
-
-**Şu Anda Kullanılan:**
-- **USGS**: https://earthquake.usgs.gov/fdsnws/event/1/
-- **EMSC**: https://www.seismicportal.eu/fdsnws/event/1/
-
-Sistem her 30 saniyede bir her iki kaynaktan da son 10 dakikalık depremleri çeker.
-
-**Gelecekte Eklenebilir:**
-- **GlobalQuake.net**: https://globalquake.net/ - Açık kaynak sismik ağ projesi
-  - Topluluk tabanlı deprem tespiti
-  - API dokümantasyonu mevcut olduğunda entegre edilebilir
-
-## 📱 Android Uygulama (React Native)
-
-### Kurulum
-
-```bash
-cd android-app
-npm install
-```
-
-### Android Studio'da Çalıştırma
-
-1. Android Studio'yu açın
-2. `android-app/android` klasörünü açın
-3. Emulator veya fiziksel cihaz bağlayın
-4. Run tuşuna basın
-
-### APK Oluşturma
-
-```bash
-cd android-app/android
-./gradlew assembleRelease
-# APK: android/app/build/outputs/apk/release/app-release.apk
-```
-
-### Veri Formatı
-
-Android uygulaması şu verileri gönderir:
-
-```json
-{
-    "timestamp": "2024-03-19T20:00:00Z",
-    "x": 0.05,
-    "y": 0.03,
-    "z": 9.81,
-    "latitude": 41.0082,
-    "longitude": 28.9784,
-    "region_id": "istanbul-fatih"
-}
-```
-
-- `x, y, z`: İvme değerleri (m/s²)
-- `latitude, longitude`: GPS koordinatları (opsiyonel)
-- `region_id`: Bölge tanımlayıcısı (opsiyonel)
-
-## 🛡️ Güvenlik Notları
-
-- Üretim ortamında CORS ayarlarını sınırlandırın
-- HTTPS kullanın (WebSocket için WSS)
-- API rate limiting ekleyin
-- Cihaz kimlik doğrulaması uygulayın
-
-## 📄 Lisans
-
-Bu proje eğitim ve araştırma amaçlıdır.
-
-## 🤝 Katkıda Bulunma
-
-1. Fork yapın
-2. Feature branch oluşturun (`git checkout -b feature/amazing-feature`)
-3. Commit yapın (`git commit -m 'Add amazing feature'`)
-4. Push edin (`git push origin feature/amazing-feature`)
-5. Pull Request açın
-
-## 📞 İletişim
-
-Sorularınız için issue açabilirsiniz.
 
 ---
 
-**Not**: Bu sistem gerçek zamanlı deprem tespiti için tasarlanmıştır ancak resmi deprem uyarı sistemlerinin yerini almaz. Sadece erken uyarı ve bilgilendirme amaçlıdır.
+## Roadmap
+
+- [ ] Standalone APK / EAS Build
+- [ ] Windows desktop app (Electron + Fluent UI)
+- [ ] Multi-device management panel
+- [ ] Country-based chat rooms
+- [ ] Additional data sources (INGV, GFZ)
+- [ ] iOS support
+
+---
+
+## Contributing
+
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Commit your changes
+4. Push and open a Pull Request
+
+---
+
+> ⚠️ This system is not a replacement for official earthquake warning services. It is intended for early alerting and community awareness only.
