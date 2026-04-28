@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { View, FlatList, StyleSheet, TouchableOpacity, Linking } from 'react-native';
-import { Text, Card, Chip, Searchbar, useTheme, ActivityIndicator } from 'react-native-paper';
+import React, { useState, useMemo, useCallback } from 'react';
+import { View, FlatList, StyleSheet, TouchableOpacity, RefreshControl, Linking } from 'react-native';
+import { Text, Card, Chip, Searchbar, useTheme, ActivityIndicator, SegmentedButtons } from 'react-native-paper';
 import { useSeismic, GlobalEvent } from '../context/SeismicContext';
+import QuakeDetailModal from './QuakeDetailModal';
 
 const getMagnitudeColor = (mag: number) => {
   if (mag >= 6.0) return '#ef4444';
@@ -36,7 +37,7 @@ const QuakeCard = ({ event, userLat, userLon }: { event: GlobalEvent; userLat?: 
   };
 
   return (
-    <TouchableOpacity onPress={() => event.url && Linking.openURL(event.url)} activeOpacity={0.7}>
+    <TouchableOpacity activeOpacity={0.7}>
       <Card style={[styles.quakeCard, { borderLeftColor: magColor, borderLeftWidth: 4 }]} mode="elevated">
         <Card.Content style={styles.cardContent}>
           <View style={[styles.magBadge, { backgroundColor: magColor }]}>
@@ -76,24 +77,61 @@ const QuakeCard = ({ event, userLat, userLon }: { event: GlobalEvent; userLat?: 
   );
 };
 
+type TimeFilter = '24h' | '7d' | '30d' | 'all';
+
 const QuakeListScreen = () => {
   const theme = useTheme();
-  const { globalEvents, userLocation, settings } = useSeismic();
+  const { globalEvents, userLocation, settings, refreshEvents } = useSeismic();
   const [search, setSearch] = useState('');
   const [filterSource, setFilterSource] = useState<string | null>(null);
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('7d');
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<GlobalEvent | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   const sources = useMemo(() => [...new Set(globalEvents.map(e => e.source))], [globalEvents]);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshEvents?.();
+    setRefreshing(false);
+  }, [refreshEvents]);
+
+  const getTimeFilterMs = () => {
+    const now = Date.now();
+    switch (timeFilter) {
+      case '24h': return now - 24 * 60 * 60 * 1000;
+      case '7d': return now - 7 * 24 * 60 * 60 * 1000;
+      case '30d': return now - 30 * 24 * 60 * 60 * 1000;
+      default: return 0;
+    }
+  };
+
   const filtered = useMemo(() => {
+    const timeThreshold = getTimeFilterMs();
     return globalEvents
       .filter(e => e.magnitude >= settings.minMagnitude)
       .filter(e => !filterSource || e.source === filterSource)
       .filter(e => !search || (e.place || '').toLowerCase().includes(search.toLowerCase()))
+      .filter(e => timeFilter === 'all' || new Date(e.timestamp).getTime() >= timeThreshold)
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [globalEvents, search, filterSource, settings.minMagnitude]);
+  }, [globalEvents, search, filterSource, settings.minMagnitude, timeFilter]);
+
+  const openDetail = (event: GlobalEvent) => {
+    setSelectedEvent(event);
+    setModalVisible(true);
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <QuakeDetailModal
+        visible={modalVisible}
+        event={selectedEvent}
+        onDismiss={() => setModalVisible(false)}
+        userLat={userLocation?.lat}
+        userLon={userLocation?.lon}
+      />
+      
       <Searchbar
         placeholder="Konum ara..."
         value={search}
@@ -122,6 +160,19 @@ const QuakeListScreen = () => {
         ))}
       </View>
 
+      <SegmentedButtons
+        value={timeFilter}
+        onValueChange={(v) => setTimeFilter(v as TimeFilter)}
+        buttons={[
+          { value: '24h', label: '24s' },
+          { value: '7d', label: '7g' },
+          { value: '30d', label: '30g' },
+          { value: 'all', label: 'Hepsi' },
+        ]}
+        style={styles.timeFilter}
+        density="small"
+      />
+
       {globalEvents.length === 0 ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator />
@@ -134,17 +185,22 @@ const QuakeListScreen = () => {
           data={filtered}
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
-            <QuakeCard
-              event={item}
-              userLat={userLocation?.lat}
-              userLon={userLocation?.lon}
-            />
+            <TouchableOpacity onPress={() => openDetail(item)} activeOpacity={0.7}>
+              <QuakeCard
+                event={item}
+                userLat={userLocation?.lat}
+                userLon={userLocation?.lon}
+              />
+            </TouchableOpacity>
           )}
           contentContainerStyle={{ padding: 12, paddingTop: 4 }}
           ListHeaderComponent={
             <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
               {filtered.length} deprem gösteriliyor (min M{settings.minMagnitude})
             </Text>
+          }
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
         />
       )}
@@ -157,6 +213,7 @@ const styles = StyleSheet.create({
   searchbar: { margin: 12, marginBottom: 4 },
   filterRow: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingBottom: 8, gap: 6 },
   filterChip: { marginRight: 4 },
+  timeFilter: { marginHorizontal: 12, marginBottom: 8 },
   quakeCard: { marginBottom: 8, borderRadius: 10 },
   cardContent: { flexDirection: 'row', alignItems: 'center' },
   magBadge: { width: 54, height: 54, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },

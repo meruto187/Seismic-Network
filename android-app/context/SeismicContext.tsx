@@ -73,6 +73,7 @@ interface SeismicContextType {
   sendChatMessage: (text: string) => void;
   updateSettings: (s: Partial<Settings>) => void;
   submitReport: (mmi: number) => Promise<boolean>;
+  refreshEvents: () => Promise<void>;
 }
 
 const SeismicContext = createContext<SeismicContextType | null>(null);
@@ -291,11 +292,26 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [userLocation, regionId]);
 
   return (
-    <SeismicContext.Provider value={{
-      isConnected, isMonitoring, sensorData, alerts, globalEvents,
-      chatMessages, networkStatus, locationError, userLocation, regionId,
-      settings, toggleMonitoring, sendChatMessage, updateSettings, submitReport,
-    }}>
+    <SeismicContext.Provider
+      value={{
+        isConnected,
+        isMonitoring,
+        sensorData,
+        alerts,
+        globalEvents,
+        chatMessages,
+        networkStatus,
+        locationError,
+        userLocation,
+        regionId,
+        settings,
+        toggleMonitoring,
+        sendChatMessage,
+        updateSettings,
+        submitReport,
+        refreshEvents: fetchGlobalEvents,
+      }}
+    >
       {children}
     </SeismicContext.Provider>
   );
