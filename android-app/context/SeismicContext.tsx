@@ -148,6 +148,7 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     fetchGlobalEvents();
     fetchNetworkStatus();
     checkBattery();
+    connectWebSocket();
 
     const statusInterval = setInterval(fetchNetworkStatus, 30000);
     const eventsInterval = setInterval(fetchGlobalEvents, 120000);
@@ -177,12 +178,10 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     if (isMonitoring) {
-      connectWebSocket();
       startAccelerometer();
     } else {
-      stopAll();
+      stopAccelerometer();
     }
-    return () => {};
   }, [isMonitoring]);
 
   const checkBattery = async () => {
@@ -315,9 +314,13 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   };
 
-  const stopAll = () => {
+  const stopAccelerometer = () => {
     sensorSubscription.current?.remove();
     sensorSubscription.current = null;
+  };
+
+  const stopAll = () => {
+    stopAccelerometer();
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;

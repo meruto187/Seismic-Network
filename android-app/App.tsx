@@ -9,6 +9,7 @@ import AlertsScreen from './screens/AlertsScreen';
 import QuakeListScreen from './screens/QuakeListScreen';
 import ReportScreen from './screens/ReportScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import ChatScreen from './screens/ChatScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -50,6 +51,11 @@ const App = () => {
                 name="Rapor"
                 component={ReportScreen}
                 options={{ tabBarIcon: ({ color }) => tabIcon('📢', color) }}
+              />
+              <Tab.Screen
+                name="Sohbet"
+                component={ChatScreen}
+                options={{ tabBarIcon: ({ color }) => tabIcon('💬', color) }}
               />
               <Tab.Screen
                 name="Ayarlar"

@@ -21,7 +21,7 @@ const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) =
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
-const QuakeCard = ({ event, userLat, userLon }: { event: GlobalEvent; userLat?: number; userLon?: number }) => {
+const QuakeCard = ({ event, userLat, userLon, onPress }: { event: GlobalEvent; userLat?: number; userLon?: number; onPress: () => void }) => {
   const theme = useTheme();
   const magColor = getMagnitudeColor(event.magnitude);
   const distance = userLat != null && userLon != null
@@ -37,7 +37,7 @@ const QuakeCard = ({ event, userLat, userLon }: { event: GlobalEvent; userLat?: 
   };
 
   return (
-    <TouchableOpacity activeOpacity={0.7}>
+    <TouchableOpacity activeOpacity={0.7} onPress={onPress}>
       <Card style={[styles.quakeCard, { borderLeftColor: magColor, borderLeftWidth: 4 }]} mode="elevated">
         <Card.Content style={styles.cardContent}>
           <View style={[styles.magBadge, { backgroundColor: magColor }]}>
@@ -185,13 +185,12 @@ const QuakeListScreen = () => {
           data={filtered}
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
-            <TouchableOpacity onPress={() => openDetail(item)} activeOpacity={0.7}>
-              <QuakeCard
-                event={item}
-                userLat={userLocation?.lat}
-                userLon={userLocation?.lon}
-              />
-            </TouchableOpacity>
+            <QuakeCard
+              event={item}
+              userLat={userLocation?.lat}
+              userLon={userLocation?.lon}
+              onPress={() => openDetail(item)}
+            />
           )}
           contentContainerStyle={{ padding: 12, paddingTop: 4 }}
           ListHeaderComponent={
