@@ -1,5 +1,9 @@
 # SismoNetwork — Phone-Based Earthquake Early Warning System
 
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![CI](https://github.com/meruto187/Seismic-Network/actions/workflows/ci.yml/badge.svg)](https://github.com/meruto187/Seismic-Network/actions)
+[![Release](https://img.shields.io/github/v/release/meruto187/Seismic-Network)](https://github.com/meruto187/Seismic-Network/releases)
+
 An open-source distributed earthquake detection network that analyzes real-time accelerometer data from Android phones, cross-references it with global seismic data (USGS, EMSC, KOERI, AFAD), and sends early warnings before official confirmation.
 
 > 📱 **Android app:** Testable via Expo Go — standalone APK coming soon  
