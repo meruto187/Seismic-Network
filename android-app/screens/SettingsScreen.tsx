@@ -109,6 +109,26 @@ const SettingsScreen = () => {
 
           <Card style={styles.card} mode="elevated">
             <Card.Content>
+              <Text variant="titleMedium" style={{ fontWeight: 'bold', marginBottom: 12 }}>İzleme Davranışı</Text>
+
+              <View style={styles.switchRow}>
+                <View style={{ flex: 1 }}>
+                  <Text variant="bodyMedium">Şarjda Otomatik Başlat</Text>
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    Cihaz şarja takılınca izlemeyi otomatik başlat
+                  </Text>
+                </View>
+                <Switch
+                  value={settings.autoStartOnCharging}
+                  onValueChange={v => updateSettings({ autoStartOnCharging: v })}
+                  color={theme.colors.primary}
+                />
+              </View>
+            </Card.Content>
+          </Card>
+
+          <Card style={styles.card} mode="elevated">
+            <Card.Content>
               <Text variant="titleMedium" style={{ fontWeight: 'bold', marginBottom: 8 }}>Cihaz Bilgisi</Text>
               <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>Cihaz ID</Text>
               <Text variant="bodyMedium" style={{ fontFamily: 'monospace', marginTop: 2 }}>{DEVICE_ID}</Text>

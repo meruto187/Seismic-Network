@@ -1,11 +1,17 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { Accelerometer } from 'expo-sensors';
 import * as Location from 'expo-location';
+import * as Battery from 'expo-battery';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const SERVER_URL = 'wss://seismic.meruto.com.tr';
 export const DEVICE_ID = 'android_' + Math.random().toString(36).substring(7);
+
 const SENSOR_INTERVAL_MS = 100;
+const UI_THROTTLE_MS = 1000;
+const WS_SEND_INTERVAL_FG = 1000;
+const WS_SEND_INTERVAL_BG = 5000;
 
 export interface SensorData {
   x: number;
@@ -48,6 +54,7 @@ export interface Settings {
   notifySound: boolean;
   notifyVibration: boolean;
   maxDistanceKm: number;
+  autoStartOnCharging: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -55,11 +62,13 @@ const DEFAULT_SETTINGS: Settings = {
   notifySound: true,
   notifyVibration: true,
   maxDistanceKm: 500,
+  autoStartOnCharging: true,
 };
 
 interface SeismicContextType {
   isConnected: boolean;
   isMonitoring: boolean;
+  isCharging: boolean;
   sensorData: SensorData;
   alerts: EqAlert[];
   globalEvents: GlobalEvent[];
@@ -97,6 +106,7 @@ const filterMessage = (text: string) => {
 export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isMonitoring, setIsMonitoring] = useState(false);
+  const [isCharging, setIsCharging] = useState(false);
   const [sensorData, setSensorData] = useState<SensorData>({ x: 0, y: 0, z: 0, magnitude: 0 });
   const [alerts, setAlerts] = useState<EqAlert[]>([]);
   const [globalEvents, setGlobalEvents] = useState<GlobalEvent[]>([]);
@@ -110,21 +120,58 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sensorSubscription = useRef<{ remove: () => void } | null>(null);
-  const lastSensorRef = useRef<SensorData>({ x: 0, y: 0, z: 0, magnitude: 0 });
   const chatRateRef = useRef<number[]>([]);
+  const isMonitoringRef = useRef(false);
+  const settingsRef = useRef(settings);
+  const regionIdRef = useRef(regionId);
+  const userLocationRef = useRef(userLocation);
+  const appStateRef = useRef<AppStateStatus>('active');
+
+  const peakBufferRef = useRef<SensorData>({ x: 0, y: 0, z: 0, magnitude: 0 });
+  const lastUiUpdateRef = useRef(0);
+  const lastWsSendRef = useRef(0);
+
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
+  useEffect(() => { regionIdRef.current = regionId; }, [regionId]);
+  useEffect(() => { userLocationRef.current = userLocation; }, [userLocation]);
+  useEffect(() => { isMonitoringRef.current = isMonitoring; }, [isMonitoring]);
 
   useEffect(() => {
     AsyncStorage.getItem('settings').then(val => {
-      if (val) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(val) });
+      if (val) {
+        const saved = { ...DEFAULT_SETTINGS, ...JSON.parse(val) };
+        setSettings(saved);
+        settingsRef.current = saved;
+      }
     });
     requestPermissions();
     fetchGlobalEvents();
     fetchNetworkStatus();
-    const statusInterval = setInterval(fetchNetworkStatus, 15000);
-    const eventsInterval = setInterval(fetchGlobalEvents, 60000);
+    checkBattery();
+
+    const statusInterval = setInterval(fetchNetworkStatus, 30000);
+    const eventsInterval = setInterval(fetchGlobalEvents, 120000);
+
+    const appStateSub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      appStateRef.current = state;
+    });
+
+    const batteryStateSub = Battery.addBatteryStateListener(({ batteryState }) => {
+      const charging = batteryState === Battery.BatteryState.CHARGING ||
+        batteryState === Battery.BatteryState.FULL;
+      setIsCharging(charging);
+      if (charging && settingsRef.current.autoStartOnCharging && !isMonitoringRef.current) {
+        setIsMonitoring(true);
+      } else if (!charging && settingsRef.current.autoStartOnCharging && isMonitoringRef.current) {
+        setIsMonitoring(false);
+      }
+    });
+
     return () => {
       clearInterval(statusInterval);
       clearInterval(eventsInterval);
+      appStateSub.remove();
+      batteryStateSub?.remove();
     };
   }, []);
 
@@ -135,8 +182,20 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } else {
       stopAll();
     }
-    return () => stopAll();
+    return () => {};
   }, [isMonitoring]);
+
+  const checkBattery = async () => {
+    try {
+      const state = await Battery.getBatteryStateAsync();
+      const charging = state === Battery.BatteryState.CHARGING || state === Battery.BatteryState.FULL;
+      setIsCharging(charging);
+      const saved = settingsRef.current;
+      if (charging && saved.autoStartOnCharging) {
+        setIsMonitoring(true);
+      }
+    } catch (_) {}
+  };
 
   const requestPermissions = async () => {
     try {
@@ -146,22 +205,27 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
         setUserLocation({ lat, lon });
-        const region = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
-        if (region.length > 0) {
-          const r = region[0];
-          setRegionId(`${r.country || ''}_${r.region || r.city || ''}`.replace(/\s+/g, '_'));
-        }
+        userLocationRef.current = { lat, lon };
+        try {
+          const region = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
+          if (region.length > 0) {
+            const r = region[0];
+            const rid = `${r.country || ''}_${r.region || r.city || ''}`.replace(/\s+/g, '_');
+            setRegionId(rid);
+            regionIdRef.current = rid;
+          }
+        } catch (_) {}
       } else {
         setLocationError('Konum izni verilmedi');
       }
-    } catch (e) {
+    } catch (_) {
       setLocationError('Konum alınamadı');
     }
   };
 
   const fetchGlobalEvents = async () => {
     try {
-      const res = await fetch(`https://seismic.meruto.com.tr/events?event_type=global&limit=100`);
+      const res = await fetch('https://seismic.meruto.com.tr/events?event_type=global&limit=100');
       const data = await res.json();
       setGlobalEvents(data.global_events || []);
     } catch (_) {}
@@ -204,7 +268,7 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     ws.onerror = () => setIsConnected(false);
     ws.onclose = () => {
       setIsConnected(false);
-      if (isMonitoring) {
+      if (isMonitoringRef.current) {
         reconnectTimer.current = setTimeout(connectWebSocket, 5000);
       }
     };
@@ -216,17 +280,37 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     sensorSubscription.current = Accelerometer.addListener((data: { x: number; y: number; z: number }) => {
       const magnitude = Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
       const sd = { ...data, magnitude };
-      lastSensorRef.current = sd;
-      setSensorData(sd);
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({
-          type: 'sensor_data',
-          device_id: DEVICE_ID,
-          x: data.x, y: data.y, z: data.z,
-          magnitude,
-          region_id: regionId,
-          timestamp: new Date().toISOString(),
-        }));
+
+      if (magnitude > peakBufferRef.current.magnitude) {
+        peakBufferRef.current = sd;
+      }
+
+      const now = Date.now();
+      const isBackground = appStateRef.current !== 'active';
+      const sendInterval = isBackground ? WS_SEND_INTERVAL_BG : WS_SEND_INTERVAL_FG;
+
+      if (now - lastWsSendRef.current >= sendInterval) {
+        lastWsSendRef.current = now;
+        const peak = peakBufferRef.current;
+        peakBufferRef.current = { x: 0, y: 0, z: 0, magnitude: 0 };
+
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({
+            type: 'sensor_data',
+            device_id: DEVICE_ID,
+            x: peak.x, y: peak.y, z: peak.z,
+            magnitude: peak.magnitude,
+            latitude: userLocationRef.current?.lat ?? null,
+            longitude: userLocationRef.current?.lon ?? null,
+            region_id: regionIdRef.current,
+            timestamp: new Date().toISOString(),
+          }));
+        }
+      }
+
+      if (!isBackground && now - lastUiUpdateRef.current >= UI_THROTTLE_MS) {
+        lastUiUpdateRef.current = now;
+        setSensorData(sd);
       }
     });
   };
@@ -266,6 +350,7 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const updateSettings = useCallback((s: Partial<Settings>) => {
     setSettings(prev => {
       const next = { ...prev, ...s };
+      settingsRef.current = next;
       AsyncStorage.setItem('settings', JSON.stringify(next));
       return next;
     });
@@ -273,15 +358,16 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const submitReport = useCallback(async (mmi: number): Promise<boolean> => {
     try {
+      const loc = userLocationRef.current;
       const res = await fetch('https://seismic.meruto.com.tr/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           device_id: DEVICE_ID,
           mmi,
-          latitude: userLocation?.lat,
-          longitude: userLocation?.lon,
-          region_id: regionId,
+          latitude: loc?.lat,
+          longitude: loc?.lon,
+          region_id: regionIdRef.current,
           timestamp: new Date().toISOString(),
         }),
       });
@@ -289,13 +375,14 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch (_) {
       return false;
     }
-  }, [userLocation, regionId]);
+  }, []);
 
   return (
     <SeismicContext.Provider
       value={{
         isConnected,
         isMonitoring,
+        isCharging,
         sensorData,
         alerts,
         globalEvents,

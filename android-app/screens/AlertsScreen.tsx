@@ -13,8 +13,8 @@ const PRIORITY_COLOR: Record<string, string> = {
 const AlertsScreen = () => {
   const theme = useTheme();
   const {
-    isConnected, isMonitoring, toggleMonitoring,
-    alerts, networkStatus, sensorData,
+    isConnected, isMonitoring, isCharging, toggleMonitoring,
+    alerts, networkStatus, sensorData, settings,
   } = useSeismic();
 
   const statusColor = !isMonitoring ? '#9ca3af' : isConnected ? '#22c55e' : '#ef4444';
@@ -36,7 +36,14 @@ const AlertsScreen = () => {
           </View>
 
           <View style={styles.toggleRow}>
-            <Text variant="bodyMedium">Sensör İzlemeyi Başlat</Text>
+            <View>
+              <Text variant="bodyMedium">Sensör İzlemeyi Başlat</Text>
+              <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                {settings.autoStartOnCharging
+                  ? isCharging ? '⚡ Şarjda — otomatik aktif' : '🔋 Şarj edilince otomatik başlar'
+                  : 'Otomatik başlatma kapalı'}
+              </Text>
+            </View>
             <Switch value={isMonitoring} onValueChange={toggleMonitoring} color={theme.colors.primary} />
           </View>
 
