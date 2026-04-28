@@ -49,6 +49,8 @@ Thumbs.db
 
 # Android app
 android-app/node_modules/
+electron-app/node_modules/
+electron-app/out/
 android-app/.expo/
 android-app/android/
 android-app/ios/
