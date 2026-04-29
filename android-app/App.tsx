@@ -9,6 +9,7 @@ import { SeismicProvider } from './context/SeismicContext';
 import { SeismicDarkTheme, SeismicLightTheme } from './theme/SeismicTheme';
 import AlertsScreen from './screens/AlertsScreen';
 import QuakeListScreen from './screens/QuakeListScreen';
+import QuakeMapScreen from './screens/QuakeMapScreen';
 import ReportScreen from './screens/ReportScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ChatScreen from './screens/ChatScreen';
@@ -25,6 +26,7 @@ type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 const TAB_ICONS: Record<string, { active: IoniconName; inactive: IoniconName }> = {
   'Uyarılar':  { active: 'radio',           inactive: 'radio-outline' },
   'Depremler': { active: 'list',             inactive: 'list-outline' },
+  'Harita':    { active: 'map',              inactive: 'map-outline' },
   'Rapor':     { active: 'megaphone',        inactive: 'megaphone-outline' },
   'Sohbet':    { active: 'chatbubbles',      inactive: 'chatbubbles-outline' },
   'Ayarlar':   { active: 'settings',         inactive: 'settings-outline' },
@@ -65,6 +67,7 @@ const App = () => {
             >
               <Tab.Screen name="Uyarılar"  component={AlertsScreen} />
               <Tab.Screen name="Depremler" component={QuakeListScreen} />
+              <Tab.Screen name="Harita"    component={QuakeMapScreen} />
               <Tab.Screen name="Rapor"     component={ReportScreen} />
               <Tab.Screen name="Sohbet"    component={ChatScreen} />
               <Tab.Screen name="Ayarlar"   component={SettingsScreen} />

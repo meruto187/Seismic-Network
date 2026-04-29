@@ -1,7 +1,7 @@
-import { app, shell, BrowserWindow, ipcMain, Notification, nativeImage } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Notification } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { setupTray } from './tray'
+import { setupTray, updateTrayQuakes } from './tray'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -70,4 +70,8 @@ ipcMain.on('show-notification', (_event, { title, body }: { title: string; body:
 ipcMain.on('show-window', () => {
   mainWindow?.show()
   mainWindow?.focus()
+})
+
+ipcMain.on('update-tray-quakes', (_event, quakes) => {
+  updateTrayQuakes(quakes)
 })

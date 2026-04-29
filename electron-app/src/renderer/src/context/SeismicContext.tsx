@@ -125,7 +125,13 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       const res = await fetch('https://seismic.meruto.com.tr/events?event_type=global&limit=200')
       const data = await res.json()
-      setGlobalEvents(data.global_events || [])
+      const events: GlobalEvent[] = data.global_events || []
+      setGlobalEvents(events)
+      const top5 = [...events]
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 5)
+        .map(e => ({ magnitude: e.magnitude, place: e.place || 'Bilinmiyor', timestamp: e.timestamp }))
+      ;(window as any).electronAPI?.updateTrayQuakes(top5)
     } catch (_) {}
   }
 
