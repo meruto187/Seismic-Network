@@ -6,11 +6,11 @@ import QuakeListScreen from './screens/QuakeListScreen'
 import QuakeMapScreen from './screens/QuakeMapScreen'
 import ChatScreen from './screens/ChatScreen'
 import SettingsScreen from './screens/SettingsScreen'
-import { Activity, List, Map, MessageSquare, Settings, Wifi, WifiOff } from 'lucide-react'
+import { Activity, List, Map, MessageSquare, Settings, Wifi, WifiOff, LucideIcon } from 'lucide-react'
 
 type Tab = 'dashboard' | 'list' | 'map' | 'chat' | 'settings'
 
-const NAV_ITEMS: { id: Tab; label: string; Icon: React.FC<{ size?: number; className?: string }> }[] = [
+const NAV_ITEMS: { id: Tab; label: string; Icon: LucideIcon }[] = [
   { id: 'dashboard', label: 'Gösterge', Icon: Activity },
   { id: 'list', label: 'Depremler', Icon: List },
   { id: 'map', label: 'Harita', Icon: Map },
@@ -26,35 +26,51 @@ const SCREENS: Record<Tab, React.FC> = {
   settings: SettingsScreen,
 }
 
+const SeismicLogo: React.FC = () => (
+  <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="32" height="32" rx="8" fill="#7f1d1d" />
+    <polyline
+      points="2,16 6,16 8,10 10,22 12,13 14,19 16,8 18,24 20,14 22,18 24,16 30,16"
+      stroke="#fca5a5"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+  </svg>
+)
+
 const Sidebar: React.FC<{ active: Tab; onSelect: (t: Tab) => void }> = ({ active, onSelect }) => {
   const { isConnected, alerts } = useSeismic()
   return (
-    <aside className="w-16 flex flex-col bg-slate-900 border-r border-slate-700 items-center py-4 gap-2 shrink-0">
-      <div className="mb-4">
-        <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white font-bold text-sm">S</div>
+    <aside className="w-[60px] flex flex-col bg-slate-950 border-r border-slate-800 items-center py-4 gap-1 shrink-0">
+      <div className="mb-5">
+        <SeismicLogo />
       </div>
       {NAV_ITEMS.map(({ id, label, Icon }) => (
         <button
           key={id}
           title={label}
           onClick={() => onSelect(id)}
-          className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-colors
+          className={`relative w-10 h-10 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all duration-150
             ${active === id
-              ? 'bg-red-600 text-white'
-              : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}
+              ? 'bg-red-700/80 text-red-100 shadow-lg shadow-red-900/40'
+              : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}
         >
-          <Icon size={18} />
-          <span className="text-[9px] leading-none">{label}</span>
+          <Icon size={17} />
+          <span className="text-[8px] leading-none font-medium tracking-wide">{label}</span>
           {id === 'dashboard' && alerts.length > 0 && (
-            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-400" />
+            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-red-400" />
           )}
         </button>
       ))}
 
-      <div className="mt-auto">
-        {isConnected
-          ? <Wifi size={16} className="text-green-400" title="Bağlı" />
-          : <WifiOff size={16} className="text-red-400 animate-pulse" title="Bağlantı yok" />}
+      <div className="mt-auto pb-1">
+        <div title={isConnected ? 'Bağlı' : 'Bağlantı yok'}>
+          {isConnected
+            ? <Wifi size={14} className="text-green-500" />
+            : <WifiOff size={14} className="text-red-500 animate-pulse" />}
+        </div>
       </div>
     </aside>
   )
