@@ -1,7 +1,8 @@
 import React, { useRef, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, Animated, TouchableOpacity } from 'react-native';
+import { View, ScrollView, StyleSheet, Animated, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { Text, Divider, useTheme } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Polyline, Line, Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { useSeismic } from '../context/SeismicContext';
 
 const PRIORITY_COLOR: Record<string, string> = {
@@ -18,31 +19,40 @@ const getMagLevel = (mag: number) => {
   return { color: '#22c55e', label: 'SAKİN' };
 };
 
-const WaveformBars = ({ magnitude }: { magnitude: number }) => {
-  const bars = 20;
+const SeismographChart = ({ history, color }: { history: number[]; color: string }) => {
+  const { width } = useWindowDimensions();
+  const W = width - 48;
+  const H = 56;
+  const PAD = 4;
+  const max = Math.max(...history, 0.5);
+  const points = history.map((v, i) => {
+    const x = PAD + (i / (history.length - 1)) * (W - PAD * 2);
+    const y = H - PAD - ((v / max) * (H - PAD * 2));
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  const midY = (H / 2).toFixed(1);
+
   return (
-    <View style={styles.waveform}>
-      {Array.from({ length: bars }).map((_, i) => {
-        const center = bars / 2;
-        const dist = Math.abs(i - center) / center;
-        const base = Math.max(0.05, 1 - dist * dist);
-        const noise = (Math.sin(i * 2.3 + magnitude * 10) * 0.3 + 0.7);
-        const height = Math.min(36, Math.max(4, base * noise * magnitude * 28 + 4));
-        const active = magnitude > 0.3 && dist < 0.6;
-        return (
-          <View
-            key={i}
-            style={[
-              styles.waveBar,
-              {
-                height,
-                backgroundColor: active ? getMagLevel(magnitude).color : '#334155',
-                opacity: active ? 0.85 + dist * 0.15 : 0.3,
-              },
-            ]}
-          />
-        );
-      })}
+    <View style={{ height: H, marginVertical: 4 }}>
+      <Svg width={W} height={H}>
+        <Defs>
+          <LinearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={color} stopOpacity="0.15" />
+            <Stop offset="1" stopColor={color} stopOpacity="0" />
+          </LinearGradient>
+        </Defs>
+        <Rect x={0} y={0} width={W} height={H} fill="transparent" />
+        <Line x1={PAD} y1={midY} x2={W - PAD} y2={midY} stroke="#1e293b" strokeWidth="1" strokeDasharray="3,3" />
+        <Polyline
+          points={points}
+          fill="none"
+          stroke={color}
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
     </View>
   );
 };
@@ -51,7 +61,7 @@ const AlertsScreen = () => {
   const theme = useTheme();
   const {
     isConnected, isMonitoring, isCharging, toggleMonitoring,
-    alerts, networkStatus, sensorData, settings,
+    alerts, networkStatus, sensorData, sensorHistory, settings,
   } = useSeismic();
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -98,7 +108,7 @@ const AlertsScreen = () => {
 
         {isMonitoring ? (
           <>
-            <WaveformBars magnitude={mag} />
+            <SeismographChart history={sensorHistory} color={magLevel.color} />
             <View style={styles.magRow}>
               <View>
                 <Text style={styles.magValue}>{mag.toFixed(3)}</Text>
@@ -225,9 +235,6 @@ const styles = StyleSheet.create({
   statusPill: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, gap: 6 },
   statusDot: { width: 7, height: 7, borderRadius: 4 },
   statusText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-
-  waveform: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 40, gap: 2 },
-  waveBar: { width: 3, borderRadius: 2 },
 
   magRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   magValue: { fontSize: 32, fontWeight: '800', color: '#f1f5f9', fontVariant: ['tabular-nums'] as any },

@@ -3,7 +3,18 @@ import { AppState, AppStateStatus } from 'react-native';
 import { Accelerometer } from 'expo-sensors';
 import * as Location from 'expo-location';
 import * as Battery from 'expo-battery';
+import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 export const SERVER_URL = 'wss://seismic.meruto.com.tr';
 export const DEVICE_ID = 'android_' + Math.random().toString(36).substring(7);
@@ -70,6 +81,7 @@ interface SeismicContextType {
   isMonitoring: boolean;
   isCharging: boolean;
   sensorData: SensorData;
+  sensorHistory: number[];
   alerts: EqAlert[];
   globalEvents: GlobalEvent[];
   chatMessages: ChatMessage[];
@@ -108,6 +120,7 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCharging, setIsCharging] = useState(false);
   const [sensorData, setSensorData] = useState<SensorData>({ x: 0, y: 0, z: 0, magnitude: 0 });
+  const [sensorHistory, setSensorHistory] = useState<number[]>(Array(60).fill(0));
   const [alerts, setAlerts] = useState<EqAlert[]>([]);
   const [globalEvents, setGlobalEvents] = useState<GlobalEvent[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -198,6 +211,7 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const requestPermissions = async () => {
     try {
+      Notifications.requestPermissionsAsync().catch(() => {});
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -226,8 +240,18 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       const res = await fetch('https://seismic.meruto.com.tr/events?event_type=global&limit=100');
       const data = await res.json();
-      setGlobalEvents(data.global_events || []);
-    } catch (_) {}
+      const events: GlobalEvent[] = data.global_events || [];
+      setGlobalEvents(events);
+      AsyncStorage.setItem('cached_events', JSON.stringify({ ts: Date.now(), events })).catch(() => {});
+    } catch (_) {
+      try {
+        const cached = await AsyncStorage.getItem('cached_events');
+        if (cached) {
+          const { events } = JSON.parse(cached) as { ts: number; events: GlobalEvent[] };
+          setGlobalEvents(events);
+        }
+      } catch (_2) {}
+    }
   };
 
   const fetchNetworkStatus = async () => {
@@ -254,6 +278,17 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const msg = JSON.parse(e.data);
         if (msg.type === 'alert') {
           setAlerts(prev => [msg, ...prev.slice(0, 49)]);
+          if (settingsRef.current.notifySound && (msg.priority === 'HIGH' || msg.priority === 'CRITICAL')) {
+            Notifications.scheduleNotificationAsync({
+              content: {
+                title: `⚠️ Sismik Uyarı — ${msg.alert_type || 'Deprem'}`,
+                body: msg.message || 'Yeni sismik aktivite tespit edildi',
+                sound: true,
+                priority: Notifications.AndroidNotificationPriority.HIGH,
+              },
+              trigger: null,
+            }).catch(() => {});
+          }
         } else if (msg.type === 'chat') {
           setChatMessages(prev => [...prev.slice(-99), {
             id: Date.now().toString(),
@@ -310,6 +345,7 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (!isBackground && now - lastUiUpdateRef.current >= UI_THROTTLE_MS) {
         lastUiUpdateRef.current = now;
         setSensorData(sd);
+        setSensorHistory(prev => [...prev.slice(1), magnitude]);
       }
     });
   };
@@ -387,6 +423,7 @@ export const SeismicProvider: React.FC<{ children: React.ReactNode }> = ({ child
         isMonitoring,
         isCharging,
         sensorData,
+        sensorHistory,
         alerts,
         globalEvents,
         chatMessages,
