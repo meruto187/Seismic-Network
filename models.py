@@ -87,6 +87,17 @@ class Alert(Base):
     local_event = relationship("LocalEvent", back_populates="alerts")
     global_event = relationship("GlobalEvent", back_populates="alerts")
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True)
+    email = Column(String, unique=True, nullable=False)
+    name = Column(String, nullable=True)
+    avatar_url = Column(String, nullable=True)
+    is_admin = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime, default=datetime.utcnow)
+
 engine = create_engine(config.DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

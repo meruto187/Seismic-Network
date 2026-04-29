@@ -59,6 +59,15 @@ class Config:
 
     ADMIN_KEY: str = os.getenv("ADMIN_KEY", "changeme-admin-key-2025")
 
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "https://seismic.meruto.com.tr/auth/callback")
+
+    JWT_SECRET: str = os.getenv("JWT_SECRET", "seismic-jwt-secret-change-me")
+    JWT_EXPIRE_DAYS: int = 30
+
+    ADMIN_EMAILS: list = os.getenv("ADMIN_EMAILS", "mertsucu806@gmail.com").split(",")
+
     WS_RATE_LIMIT_PER_SECOND: int = 5
     WS_MAX_MESSAGE_BYTES: int = 4096
 

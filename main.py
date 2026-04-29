@@ -1,20 +1,23 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Request, Header
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Set
 import json
 import logging
 import asyncio
 import time
+import secrets
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
+import httpx
+from jose import jwt, JWTError
 
 from config import config
 from models import (
-    init_db, get_db, Device, SensorData, LocalEvent, 
-    GlobalEvent, Alert, SessionLocal
+    init_db, get_db, Device, SensorData, LocalEvent,
+    GlobalEvent, Alert, User, SessionLocal
 )
 from analysis import (
     signal_processor, geofence_analyzer, event_matcher
@@ -65,6 +68,33 @@ def require_admin(x_admin_key: Optional[str] = Header(None)):
     if x_admin_key != config.ADMIN_KEY:
         raise HTTPException(status_code=401, detail="Invalid or missing admin key")
     return True
+
+oauth_states: Dict[str, str] = {}
+
+def create_jwt(user: User) -> str:
+    payload = {
+        "sub": user.id,
+        "email": user.email,
+        "name": user.name,
+        "avatar": user.avatar_url,
+        "is_admin": user.is_admin,
+        "exp": datetime.utcnow() + timedelta(days=config.JWT_EXPIRE_DAYS),
+    }
+    return jwt.encode(payload, config.JWT_SECRET, algorithm="HS256")
+
+def decode_jwt(token: str) -> Optional[dict]:
+    try:
+        return jwt.decode(token, config.JWT_SECRET, algorithms=["HS256"])
+    except JWTError:
+        return None
+
+def require_jwt(authorization: Optional[str] = Header(None)) -> dict:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing token")
+    payload = decode_jwt(authorization.split(" ", 1)[1])
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return payload
 
 def ws_rate_ok(device_id: str) -> bool:
     now = time.monotonic()
@@ -397,10 +427,15 @@ body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--tex
   <div class="login-box">
     <div style="font-size:28px">🌍</div>
     <h2>SismoNetwork Admin</h2>
-    <p>Yönetim paneline erişmek için admin anahtarını girin.</p>
+    <p>Google hesabınla veya admin anahtarıyla giriş yap.</p>
+    <a href="/auth/login?redirect_after=/dashboard" style="display:flex;align-items:center;justify-content:center;gap:10px;background:#fff;color:#1f2937;border-radius:10px;padding:11px;font-size:14px;font-weight:600;text-decoration:none;border:1px solid #e5e7eb">
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-3.59-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Google ile Giriş Yap
+    </a>
+    <div style="display:flex;align-items:center;gap:8px;color:var(--text3);font-size:12px"><div style="flex:1;height:1px;background:var(--border)"></div>veya<div style="flex:1;height:1px;background:var(--border)"></div></div>
     <input id="key-input" type="password" placeholder="Admin anahtarı..." />
     <div class="login-err" id="login-err">Hatalı anahtar. Tekrar deneyin.</div>
-    <button onclick="doLogin()">Giriş Yap</button>
+    <button onclick="doLogin()">Anahtar ile Giriş</button>
   </div>
 </div>
 
@@ -410,7 +445,14 @@ body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--tex
       <div class="topbar-logo">🌐</div>
       <h1>SismoNetwork Admin</h1>
     </div>
-    <div class="live-badge"><span class="dot"></span><span id="ws-count">0 bağlantı</span></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="live-badge"><span class="dot"></span><span id="ws-count">0 bağlantı</span></div>
+      <div id="user-badge" style="display:none;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:999px;padding:4px 12px 4px 4px">
+        <img id="user-avatar" src="" width="24" height="24" style="border-radius:50%;object-fit:cover" />
+        <span id="user-name" style="font-size:12px;font-weight:600"></span>
+        <span id="user-admin-badge" style="display:none;font-size:10px;background:rgba(239,68,68,.15);color:var(--red);border-radius:4px;padding:1px 5px;font-weight:700">ADMIN</span>
+      </div>
+    </div>
   </div>
   <div class="tabs">
     <div class="tab active" onclick="switchTab('overview')">Genel Bakış</div>
@@ -497,10 +539,55 @@ body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--tex
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 let ADMIN_KEY = '';
+let JWT_TOKEN = '';
 let map, deviceMarkers=[], eventMarkers=[];
 let bannedDevices = new Set();
 let chatWs = null;
 let currentTab = 'overview';
+
+function showUserBadge(payload) {
+  const badge = document.getElementById('user-badge');
+  badge.style.display = 'flex';
+  document.getElementById('user-avatar').src = payload.avatar || '';
+  document.getElementById('user-name').textContent = payload.name || payload.email || '';
+  const adminBadge = document.getElementById('user-admin-badge');
+  adminBadge.style.display = payload.is_admin ? 'inline' : 'none';
+}
+
+function checkUrlToken() {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token');
+  if (token) {
+    JWT_TOKEN = token;
+    localStorage.setItem('sismo_jwt', token);
+    history.replaceState({}, '', location.pathname);
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      showUserBadge(payload);
+      document.getElementById('login-overlay').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      initApp();
+    } catch(e) { console.error('JWT parse error', e); }
+    return true;
+  }
+  const stored = localStorage.getItem('sismo_jwt');
+  if (stored) {
+    try {
+      const payload = JSON.parse(atob(stored.split('.')[1]));
+      if (payload.exp * 1000 > Date.now()) {
+        JWT_TOKEN = stored;
+        showUserBadge(payload);
+        document.getElementById('login-overlay').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        initApp();
+        return true;
+      } else {
+        localStorage.removeItem('sismo_jwt');
+      }
+    } catch(e) {}
+  }
+  return false;
+}
 
 function doLogin() {
   const key = document.getElementById('key-input').value.trim();
@@ -518,6 +605,7 @@ function doLogin() {
     }).catch(() => { document.getElementById('login-err').style.display = 'block'; });
 }
 document.getElementById('key-input').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+checkUrlToken();
 
 function switchTab(name) {
   currentTab = name;
@@ -979,6 +1067,105 @@ async def resolve_alert(alert_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     return {"status": "resolved", "alert_id": alert_id}
+
+@app.get("/auth/login")
+async def auth_login(redirect_after: str = "/dashboard"):
+    state = secrets.token_urlsafe(16)
+    oauth_states[state] = redirect_after
+    params = (
+        f"client_id={config.GOOGLE_CLIENT_ID}"
+        f"&redirect_uri={config.GOOGLE_REDIRECT_URI}"
+        f"&response_type=code"
+        f"&scope=openid%20email%20profile"
+        f"&state={state}"
+        f"&access_type=offline"
+        f"&prompt=select_account"
+    )
+    return RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
+
+@app.get("/auth/callback")
+async def auth_callback(code: str, state: str, db: Session = Depends(get_db)):
+    if state not in oauth_states:
+        raise HTTPException(status_code=400, detail="Invalid state")
+    redirect_after = oauth_states.pop(state)
+
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post("https://oauth2.googleapis.com/token", data={
+            "code": code,
+            "client_id": config.GOOGLE_CLIENT_ID,
+            "client_secret": config.GOOGLE_CLIENT_SECRET,
+            "redirect_uri": config.GOOGLE_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        })
+        token_data = token_resp.json()
+        if "error" in token_data:
+            raise HTTPException(status_code=400, detail=token_data.get("error_description", "OAuth error"))
+
+        userinfo_resp = await client.get(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {token_data['access_token']}"}
+        )
+        info = userinfo_resp.json()
+
+    google_id = info.get("sub")
+    email = info.get("email", "")
+    name = info.get("name", email.split("@")[0])
+    avatar = info.get("picture", "")
+
+    user = db.query(User).filter(User.id == google_id).first()
+    if not user:
+        user = User(
+            id=google_id,
+            email=email,
+            name=name,
+            avatar_url=avatar,
+            is_admin=email in config.ADMIN_EMAILS,
+        )
+        db.add(user)
+    else:
+        user.name = name
+        user.avatar_url = avatar
+        user.last_login = datetime.utcnow()
+        user.is_admin = email in config.ADMIN_EMAILS
+    db.commit()
+    db.refresh(user)
+
+    token = create_jwt(user)
+    if redirect_after.startswith("/"):
+        return RedirectResponse(f"{redirect_after}?token={token}", status_code=302)
+    return JSONResponse({"token": token, "user": {"id": user.id, "email": user.email, "name": user.name, "avatar": user.avatar_url, "is_admin": user.is_admin}})
+
+@app.post("/auth/verify")
+async def auth_verify(user: dict = Depends(require_jwt)):
+    return {"valid": True, "user": user}
+
+@app.get("/auth/me")
+async def auth_me(user: dict = Depends(require_jwt), db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.id == user["sub"]).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "id": db_user.id,
+        "email": db_user.email,
+        "name": db_user.name,
+        "avatar": db_user.avatar_url,
+        "is_admin": db_user.is_admin,
+        "created_at": db_user.created_at.isoformat(),
+    }
+
+@app.get("/admin/users", dependencies=[Depends(require_admin)])
+async def list_users(db: Session = Depends(get_db)):
+    users = db.query(User).order_by(User.last_login.desc()).all()
+    return [{"id": u.id, "email": u.email, "name": u.name, "avatar": u.avatar_url, "is_admin": u.is_admin, "last_login": u.last_login.isoformat()} for u in users]
+
+@app.patch("/admin/users/{user_id}/admin", dependencies=[Depends(require_admin)])
+async def toggle_admin(user_id: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_admin = not user.is_admin
+    db.commit()
+    return {"id": user.id, "is_admin": user.is_admin}
 
 @app.get("/admin/chat", dependencies=[Depends(require_admin)])
 async def get_chat_history(limit: int = 100):
