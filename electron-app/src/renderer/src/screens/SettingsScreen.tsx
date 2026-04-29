@@ -1,6 +1,7 @@
 import React from 'react'
 import { useSeismic } from '../context/SeismicContext'
-import { Bell, BellOff, MessageSquare, Sliders } from 'lucide-react'
+import { useTheme } from '../App'
+import { Bell, MessageSquare, Sliders, Sun, Moon, Monitor } from 'lucide-react'
 
 const MAG_OPTIONS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0]
 
@@ -9,23 +10,30 @@ const Toggle: React.FC<{ label: string; description: string; checked: boolean; o
 }) => (
   <div className="flex items-center justify-between py-4">
     <div className="flex items-center gap-3">
-      {icon && <div className="text-slate-400">{icon}</div>}
+      {icon && <div style={{ color: 'var(--text-3)' }}>{icon}</div>}
       <div>
-        <p className="text-sm font-medium text-slate-200">{label}</p>
-        <p className="text-xs text-slate-500 mt-0.5">{description}</p>
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{description}</p>
       </div>
     </div>
     <button
       onClick={() => onChange(!checked)}
-      className={`relative w-11 h-6 rounded-full transition-colors ${checked ? 'bg-blue-600' : 'bg-slate-600'}`}
+      className="relative w-11 h-6 rounded-full transition-colors"
+      style={{ background: checked ? '#3b82f6' : 'var(--surface-3)' }}
     >
       <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
     </button>
   </div>
 )
 
+const THEME_OPTIONS: { value: 'dark' | 'light'; label: string; icon: React.ReactNode }[] = [
+  { value: 'dark',  label: 'Karanlık', icon: <Moon size={14} /> },
+  { value: 'light', label: 'Aydınlık', icon: <Sun size={14} /> },
+]
+
 const SettingsScreen: React.FC = () => {
   const { settings, updateSettings, networkStatus, isConnected } = useSeismic()
+  const { theme, toggleTheme } = useTheme()
 
   return (
     <div className="h-full overflow-y-auto p-6 max-w-2xl mx-auto space-y-6" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
@@ -104,6 +112,32 @@ const SettingsScreen: React.FC = () => {
           <span className="ml-auto" style={{ color: 'var(--text-3)' }}>
             {networkStatus.active_devices} cihaz · {networkStatus.websocket_connections} bağlantı
           </span>
+        </div>
+      </div>
+
+      <div className="rounded-xl border p-5 space-y-3" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+        <h2 className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--text-2)' }}>
+          <Monitor size={15} /> Görünüm
+        </h2>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Tema</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Uygulama renk teması</p>
+          </div>
+          <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: 'var(--border-2)' }}>
+            {THEME_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => { if (theme !== opt.value) toggleTheme() }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all"
+                style={theme === opt.value
+                  ? { background: 'var(--surface-3)', color: 'var(--text)' }
+                  : { background: 'transparent', color: 'var(--text-3)' }}
+              >
+                {opt.icon}{opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

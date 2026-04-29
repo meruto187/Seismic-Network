@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react'
-import { useSeismic, GlobalEvent } from '../context/SeismicContext'
+import { useSeismic } from '../context/SeismicContext'
 
 declare global {
   interface Window {
@@ -111,10 +111,29 @@ const QuakeMapScreen: React.FC = () => {
     if (marker) marker.openPopup()
   }, [selectedEvent])
 
+  const latest = [...globalEvents]
+    .filter(e => e.magnitude >= settings.minMagnitude)
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
+
   return (
     <div className="h-full flex flex-col">
+      {latest && (
+        <div
+          className="flex items-center gap-3 px-4 py-2 text-xs border-b shrink-0"
+          style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+        >
+          <span
+            className="font-bold text-sm px-2 py-0.5 rounded"
+            style={{ background: getMagColor(latest.magnitude) + '22', color: getMagColor(latest.magnitude) }}
+          >
+            M{latest.magnitude.toFixed(1)}
+          </span>
+          <span className="truncate flex-1" style={{ color: 'var(--text)' }}>{latest.place || 'Konum bilinmiyor'}</span>
+          <span style={{ color: 'var(--text-3)' }}>{timeAgo(latest.timestamp)}</span>
+        </div>
+      )}
       <div ref={mapContainerRef} className="flex-1" />
-      <div className="flex items-center gap-4 px-4 py-2 bg-slate-900 border-t border-slate-700 text-xs text-slate-400">
+      <div className="flex items-center gap-4 px-4 py-2 border-t text-xs" style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-3)' }}>
         <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-500 inline-block" />M2-3</div>
         <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-yellow-500 inline-block" />M3-4</div>
         <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-orange-500 inline-block" />M4-5</div>

@@ -1,11 +1,14 @@
-import React from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
-import { Text, Card, Switch, Divider, useTheme, Chip } from 'react-native-paper';
+import React, { useState } from 'react';
+import { View, ScrollView, StyleSheet, Modal, TouchableOpacity } from 'react-native';
+import { Text, Card, Switch, Divider, useTheme, Chip, Button } from 'react-native-paper';
+import { Ionicons } from '@expo/vector-icons';
 import { useSeismic, DEVICE_ID } from '../context/SeismicContext';
+import ReportScreen from './ReportScreen';
 
 const SettingsScreen = () => {
   const theme = useTheme();
   const { settings, updateSettings } = useSeismic();
+  const [reportOpen, setReportOpen] = useState(false);
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -85,6 +88,35 @@ const SettingsScreen = () => {
       </Card>
 
       <Card style={styles.card} mode="elevated">
+        <Card.Content style={{ gap: 8 }}>
+          <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>Deprem Raporu</Text>
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            Hissettiklerin bir sarsıntıyı ağa raporla
+          </Text>
+          <Button
+            mode="contained"
+            icon="megaphone-outline"
+            onPress={() => setReportOpen(true)}
+            style={{ marginTop: 4 }}
+          >
+            Rapor Gönder
+          </Button>
+        </Card.Content>
+      </Card>
+
+      <Modal visible={reportOpen} animationType="slide" onRequestClose={() => setReportOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+          <View style={[styles.modalHeader, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.outlineVariant }]}>
+            <Text variant="titleMedium" style={{ fontWeight: '700' }}>Deprem Raporu</Text>
+            <TouchableOpacity onPress={() => setReportOpen(false)}>
+              <Ionicons name="close" size={24} color={theme.colors.onSurface} />
+            </TouchableOpacity>
+          </View>
+          <ReportScreen />
+        </View>
+      </Modal>
+
+      <Card style={styles.card} mode="elevated">
         <Card.Content>
           <Text variant="titleMedium" style={{ fontWeight: 'bold', marginBottom: 8 }}>Cihaz Bilgisi</Text>
           <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>Cihaz ID</Text>
@@ -102,6 +134,7 @@ const styles = StyleSheet.create({
   card: { marginBottom: 12 },
   switchRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
 });
 
 export default SettingsScreen;

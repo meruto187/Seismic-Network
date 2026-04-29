@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react'
-import { useSeismic, GlobalEvent } from '../context/SeismicContext'
+import { useSeismic } from '../context/SeismicContext'
 import { Search, RefreshCw, ExternalLink } from 'lucide-react'
 
 type TimeFilter = '24h' | '7d' | '30d' | 'all'
+type SortKey = 'time' | 'magnitude' | 'depth'
 
 const getMagColor = (mag: number) => {
   if (mag >= 6.0) return 'bg-red-500'
@@ -27,6 +28,8 @@ const QuakeListScreen: React.FC = () => {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('7d')
   const [sourceFilter, setSourceFilter] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>('time')
+  const [sortAsc, setSortAsc] = useState(false)
 
   const sources = useMemo(() => [...new Set(globalEvents.map(e => e.source))], [globalEvents])
 
@@ -42,13 +45,18 @@ const QuakeListScreen: React.FC = () => {
 
   const filtered = useMemo(() => {
     const thr = getTimeThreshold()
-    return globalEvents
+    const list = globalEvents
       .filter(e => e.magnitude >= settings.minMagnitude)
       .filter(e => !sourceFilter || e.source === sourceFilter)
       .filter(e => !search || (e.place || '').toLowerCase().includes(search.toLowerCase()))
       .filter(e => timeFilter === 'all' || new Date(e.timestamp).getTime() >= thr)
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-  }, [globalEvents, search, timeFilter, sourceFilter, settings.minMagnitude])
+    const dir = sortAsc ? 1 : -1
+    return list.sort((a, b) => {
+      if (sortKey === 'magnitude') return dir * (a.magnitude - b.magnitude)
+      if (sortKey === 'depth') return dir * (Math.abs(a.depth_km) - Math.abs(b.depth_km))
+      return dir * (new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    })
+  }, [globalEvents, search, timeFilter, sourceFilter, settings.minMagnitude, sortKey, sortAsc])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -116,7 +124,24 @@ const QuakeListScreen: React.FC = () => {
           ))}
         </div>
 
-        <p className="text-xs" style={{ color: 'var(--text-3)' }}>{filtered.length} deprem (min M{settings.minMagnitude})</p>
+        <div className="flex items-center justify-between">
+          <p className="text-xs" style={{ color: 'var(--text-3)' }}>{filtered.length} deprem (min M{settings.minMagnitude})</p>
+          <div className="flex items-center gap-1">
+            {([['time','Zaman'],['magnitude','Büyüklük'],['depth','Derinlik']] as [SortKey,string][]).map(([k, lbl]) => (
+              <button
+                key={k}
+                onClick={() => { sortKey === k ? setSortAsc(v => !v) : (setSortKey(k), setSortAsc(false)) }}
+                className="flex items-center gap-1 px-2 py-0.5 rounded text-xs transition-all"
+                style={sortKey === k
+                  ? { background: 'var(--surface-3)', color: 'var(--text)' }
+                  : { color: 'var(--text-3)' }}
+              >
+                {lbl}
+                {sortKey === k && <span className="text-[10px]">{sortAsc ? '↑' : '↓'}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto" style={{ background: 'var(--bg)' }}>

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { View, FlatList, StyleSheet, TouchableOpacity, RefreshControl, Linking } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Text, Card, Chip, Searchbar, useTheme, ActivityIndicator, SegmentedButtons } from 'react-native-paper';
 import { useSeismic, GlobalEvent } from '../context/SeismicContext';
 import QuakeDetailModal from './QuakeDetailModal';
@@ -186,9 +187,22 @@ const QuakeListScreen = () => {
 
       {globalEvents.length === 0 ? (
         <View style={styles.loadingBox}>
-          <ActivityIndicator />
-          <Text variant="bodyMedium" style={{ marginTop: 8, color: theme.colors.onSurfaceVariant }}>
-            Deprem verileri yükleniyor...
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text variant="titleSmall" style={{ marginTop: 16, fontWeight: '700' }}>
+            Veriler yükleniyor
+          </Text>
+          <Text variant="bodySmall" style={{ marginTop: 4, color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>
+            Sunucudan deprem verileri alınıyor...
+          </Text>
+        </View>
+      ) : filtered.length === 0 ? (
+        <View style={styles.loadingBox}>
+          <Ionicons name="search-outline" size={48} color={theme.colors.onSurfaceVariant} style={{ opacity: 0.4 }} />
+          <Text variant="titleSmall" style={{ marginTop: 16, fontWeight: '700' }}>
+            Sonuç bulunamadı
+          </Text>
+          <Text variant="bodySmall" style={{ marginTop: 4, color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>
+            Farklı bir filtre veya arama deneyin
           </Text>
         </View>
       ) : (
