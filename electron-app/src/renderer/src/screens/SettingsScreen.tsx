@@ -28,29 +28,27 @@ const SettingsScreen: React.FC = () => {
   const { settings, updateSettings, networkStatus, isConnected } = useSeismic()
 
   return (
-    <div className="h-full overflow-y-auto p-6 max-w-2xl mx-auto space-y-6">
+    <div className="h-full overflow-y-auto p-6 max-w-2xl mx-auto space-y-6" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
       <div>
-        <h1 className="text-xl font-bold text-slate-100">Ayarlar</h1>
-        <p className="text-sm text-slate-400">Uygulama tercihlerini düzenle</p>
+        <h1 className="text-xl font-bold">Ayarlar</h1>
+        <p className="text-sm" style={{ color: 'var(--text-2)' }}>Uygulama tercihlerini düzenle</p>
       </div>
 
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-5 space-y-2">
-        <h2 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+      <div className="rounded-xl border p-5 space-y-4" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+        <h2 className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--text-2)' }}>
           <Sliders size={15} /> Filtreler
         </h2>
-
         <div>
-          <p className="text-sm text-slate-400 mb-3">Minimum Büyüklük Eşiği</p>
+          <p className="text-sm mb-3" style={{ color: 'var(--text-2)' }}>Minimum Büyüklük Eşiği</p>
           <div className="flex flex-wrap gap-2">
             {MAG_OPTIONS.map(mag => (
               <button
                 key={mag}
                 onClick={() => updateSettings({ minMagnitude: mag })}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  settings.minMagnitude === mag
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
+                className="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                style={settings.minMagnitude === mag
+                  ? { background: '#3b82f6', color: '#fff' }
+                  : { background: 'var(--surface-2)', color: 'var(--text-2)' }}
               >
                 M{mag.toFixed(1)}
               </button>
@@ -59,55 +57,61 @@ const SettingsScreen: React.FC = () => {
         </div>
       </div>
 
-      <div className="bg-slate-800 rounded-xl border border-slate-700 px-5 divide-y divide-slate-700">
-        <h2 className="text-sm font-semibold text-slate-300 py-4 flex items-center gap-2">
+      <div className="rounded-xl border px-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+        <h2 className="text-sm font-semibold py-4 flex items-center gap-2" style={{ color: 'var(--text-2)' }}>
           <Bell size={15} /> Bildirimler
         </h2>
-        <Toggle
-          label="Deprem Uyarıları"
-          description="Yeni uyarı geldiğinde masaüstü bildirimi göster"
-          checked={settings.notifyAlerts}
-          onChange={v => updateSettings({ notifyAlerts: v })}
-          icon={<Bell size={16} />}
-        />
-        <Toggle
-          label="Sohbet Mesajları"
-          description="Odak dışındayken yeni mesajlar için bildirim"
-          checked={settings.notifyChat}
-          onChange={v => updateSettings({ notifyChat: v })}
-          icon={<MessageSquare size={16} />}
-        />
-      </div>
-
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
-        <h2 className="text-sm font-semibold text-slate-300 mb-4">Sunucu & Bağlantı</h2>
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs text-slate-400 block mb-1">WebSocket URL</label>
-            <input
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 font-mono focus:outline-none focus:border-blue-500"
-              value={settings.serverUrl}
-              onChange={e => updateSettings({ serverUrl: e.target.value })}
-              placeholder="wss://..."
-            />
-          </div>
-          <div className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg ${
-            isConnected ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'
-          }`}>
-            <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400 animate-pulse'}`} />
-            {isConnected ? 'Bağlantı aktif' : 'Bağlantı yok'}
-            <span className="ml-auto text-slate-500">
-              {networkStatus.active_devices} cihaz · {networkStatus.websocket_connections} bağlantı
-            </span>
-          </div>
+        <div className="border-t" style={{ borderColor: 'var(--border)' }}>
+          <Toggle
+            label="Deprem Uyarıları"
+            description="Yeni uyarı geldiğinde masaüstü bildirimi göster"
+            checked={settings.notifyAlerts}
+            onChange={v => updateSettings({ notifyAlerts: v })}
+            icon={<Bell size={16} />}
+          />
+        </div>
+        <div className="border-t" style={{ borderColor: 'var(--border)' }}>
+          <Toggle
+            label="Sohbet Mesajları"
+            description="Odak dışındayken yeni mesajlar için bildirim"
+            checked={settings.notifyChat}
+            onChange={v => updateSettings({ notifyChat: v })}
+            icon={<MessageSquare size={16} />}
+          />
         </div>
       </div>
 
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
-        <h2 className="text-sm font-semibold text-slate-300 mb-3">Uygulama Hakkında</h2>
-        <div className="space-y-1 text-sm text-slate-400">
+      <div className="rounded-xl border p-5 space-y-3" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+        <h2 className="text-sm font-semibold" style={{ color: 'var(--text-2)' }}>Sunucu & Bağlantı</h2>
+        <div>
+          <label className="text-xs block mb-1" style={{ color: 'var(--text-2)' }}>WebSocket URL</label>
+          <input
+            className="w-full rounded-lg px-3 py-2 text-sm font-mono focus:outline-none"
+            style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', color: 'var(--text)' }}
+            value={settings.serverUrl}
+            onChange={e => updateSettings({ serverUrl: e.target.value })}
+            placeholder="wss://..."
+          />
+        </div>
+        <div
+          className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
+          style={isConnected
+            ? { background: 'rgba(34,197,94,0.1)', color: '#22c55e' }
+            : { background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}
+        >
+          <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400 animate-pulse'}`} />
+          {isConnected ? 'Bağlantı aktif' : 'Bağlantı yok'}
+          <span className="ml-auto" style={{ color: 'var(--text-3)' }}>
+            {networkStatus.active_devices} cihaz · {networkStatus.websocket_connections} bağlantı
+          </span>
+        </div>
+      </div>
+
+      <div className="rounded-xl border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+        <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-2)' }}>Uygulama Hakkında</h2>
+        <div className="space-y-1 text-sm" style={{ color: 'var(--text-2)' }}>
           <p>Merkezi Sismik Ağ — Masaüstü İstemcisi</p>
-          <p className="text-xs text-slate-600">v1.0.0 · Electron + React · MIT Lisansı</p>
+          <p className="text-xs" style={{ color: 'var(--text-3)' }}>v1.0.0 · Electron + React · MIT Lisansı</p>
         </div>
       </div>
     </div>

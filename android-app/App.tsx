@@ -2,10 +2,11 @@ import React from 'react';
 import { useColorScheme } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { PaperProvider, MD3DarkTheme, MD3LightTheme, adaptNavigationTheme } from 'react-native-paper';
+import { PaperProvider, adaptNavigationTheme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { SeismicProvider } from './context/SeismicContext';
+import { SeismicDarkTheme, SeismicLightTheme } from './theme/SeismicTheme';
 import AlertsScreen from './screens/AlertsScreen';
 import QuakeListScreen from './screens/QuakeListScreen';
 import ReportScreen from './screens/ReportScreen';
@@ -32,7 +33,7 @@ const TAB_ICONS: Record<string, { active: IoniconName; inactive: IoniconName }> 
 const App = () => {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
-  const paperTheme = isDark ? MD3DarkTheme : MD3LightTheme;
+  const paperTheme = isDark ? SeismicDarkTheme : SeismicLightTheme;
   const navTheme = isDark ? NavDark : NavLight;
 
   return (
@@ -43,13 +44,13 @@ const App = () => {
             <Tab.Navigator
               screenOptions={({ route }) => ({
                 tabBarActiveTintColor: paperTheme.colors.primary,
-                tabBarInactiveTintColor: isDark ? '#6b7280' : '#9ca3af',
+                tabBarInactiveTintColor: isDark ? '#475569' : '#94a3b8',
                 tabBarStyle: {
                   paddingBottom: 6,
                   paddingTop: 4,
                   height: 60,
                   backgroundColor: paperTheme.colors.surface,
-                  borderTopColor: isDark ? '#1e293b' : '#e2e8f0',
+                  borderTopColor: paperTheme.colors.outlineVariant,
                 },
                 tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
                 headerStyle: { backgroundColor: paperTheme.colors.surface },

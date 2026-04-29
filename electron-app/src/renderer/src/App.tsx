@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, createContext, useContext } from 'react'
 import { SeismicProvider } from './context/SeismicContext'
 import { useSeismic } from './context/SeismicContext'
 import DashboardScreen from './screens/DashboardScreen'
@@ -6,7 +6,11 @@ import QuakeListScreen from './screens/QuakeListScreen'
 import QuakeMapScreen from './screens/QuakeMapScreen'
 import ChatScreen from './screens/ChatScreen'
 import SettingsScreen from './screens/SettingsScreen'
-import { Activity, List, Map, MessageSquare, Settings, Wifi, WifiOff, LucideIcon } from 'lucide-react'
+import { Activity, List, Map, MessageSquare, Settings, Wifi, WifiOff, LucideIcon, Sun, Moon } from 'lucide-react'
+
+type Theme = 'dark' | 'light'
+const ThemeCtx = createContext<{ theme: Theme; toggleTheme: () => void }>({ theme: 'dark', toggleTheme: () => {} })
+export const useTheme = () => useContext(ThemeCtx)
 
 type Tab = 'dashboard' | 'list' | 'map' | 'chat' | 'settings'
 
@@ -42,31 +46,50 @@ const SeismicLogo: React.FC = () => (
 
 const Sidebar: React.FC<{ active: Tab; onSelect: (t: Tab) => void }> = ({ active, onSelect }) => {
   const { isConnected, alerts } = useSeismic()
+  const { theme, toggleTheme } = useTheme()
+  const isLight = theme === 'light'
+
   return (
-    <aside className="w-[60px] flex flex-col bg-slate-950 border-r border-slate-800 items-center py-4 gap-1 shrink-0">
+    <aside
+      className="w-[60px] flex flex-col items-center py-4 gap-1 shrink-0"
+      style={{ background: 'var(--surface)', borderRight: '1px solid var(--border)' }}
+    >
       <div className="mb-5">
         <SeismicLogo />
       </div>
+
       {NAV_ITEMS.map(({ id, label, Icon }) => (
         <button
           key={id}
           title={label}
           onClick={() => onSelect(id)}
-          className={`relative w-10 h-10 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all duration-150
-            ${active === id
-              ? 'bg-red-700/80 text-red-100 shadow-lg shadow-red-900/40'
-              : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}
+          className="relative w-10 h-10 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all duration-150"
+          style={
+            active === id
+              ? { background: 'rgba(230,57,70,0.18)', color: '#e63946', boxShadow: '0 2px 12px rgba(230,57,70,0.18)' }
+              : { color: 'var(--text-3)' }
+          }
+          onMouseEnter={e => { if (active !== id) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-2)' }}
+          onMouseLeave={e => { if (active !== id) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-3)' }}
         >
           <Icon size={17} />
-          <span className="text-[8px] leading-none font-medium tracking-wide">{label}</span>
+          <span className="text-[8px] leading-none font-semibold tracking-wide">{label}</span>
           {id === 'dashboard' && alerts.length > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-red-400" />
+            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-red-500" />
           )}
         </button>
       ))}
 
-      <div className="mt-auto pb-1">
-        <div title={isConnected ? 'Bağlı' : 'Bağlantı yok'}>
+      <div className="mt-auto flex flex-col items-center gap-2 pb-1">
+        <button
+          title={isLight ? 'Karanlık moda geç' : 'Aydınlık moda geç'}
+          onClick={toggleTheme}
+          className="w-8 h-8 rounded-lg flex items-center justify-center transition-all"
+          style={{ color: 'var(--text-3)' }}
+        >
+          {isLight ? <Moon size={15} /> : <Sun size={15} />}
+        </button>
+        <div title={isConnected ? 'Bağlı' : 'Bağlantı yok'} className="flex items-center justify-center">
           {isConnected
             ? <Wifi size={14} className="text-green-500" />
             : <WifiOff size={14} className="text-red-500 animate-pulse" />}
@@ -81,7 +104,7 @@ const Shell: React.FC = () => {
   const Screen = SCREENS[activeTab]
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
       <Sidebar active={activeTab} onSelect={setActiveTab} />
       <main className="flex-1 overflow-hidden">
         <Screen />
@@ -90,10 +113,34 @@ const Shell: React.FC = () => {
   )
 }
 
-const App: React.FC = () => (
-  <SeismicProvider>
-    <Shell />
-  </SeismicProvider>
-)
+const App: React.FC = () => {
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+
+  useEffect(() => {
+    const saved = localStorage.getItem('ui-theme') as 'dark' | 'light' | null
+    if (saved) { setTheme(saved); applyTheme(saved) }
+  }, [])
+
+  const applyTheme = (t: 'dark' | 'light') => {
+    const root = document.documentElement
+    if (t === 'light') root.classList.add('light')
+    else root.classList.remove('light')
+  }
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    applyTheme(next)
+    localStorage.setItem('ui-theme', next)
+  }
+
+  return (
+    <ThemeCtx.Provider value={{ theme, toggleTheme }}>
+      <SeismicProvider>
+        <Shell />
+      </SeismicProvider>
+    </ThemeCtx.Provider>
+  )
+}
 
 export default App

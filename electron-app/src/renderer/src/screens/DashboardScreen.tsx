@@ -26,11 +26,11 @@ const timeAgo = (ts: string) => {
   return `${Math.floor(hrs / 24)} gün`
 }
 
-const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: string | number; color?: string }> = ({ icon, label, value, color = 'text-slate-100' }) => (
-  <div className="bg-slate-800 rounded-xl p-4 flex items-center gap-4 border border-slate-700">
-    <div className="text-slate-400">{icon}</div>
+const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: string | number; color?: string }> = ({ icon, label, value, color = '' }) => (
+  <div className="rounded-xl p-4 flex items-center gap-4 border" style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}>
+    <div style={{ color: 'var(--text-3)' }}>{icon}</div>
     <div>
-      <p className="text-xs text-slate-400">{label}</p>
+      <p className="text-xs" style={{ color: 'var(--text-2)' }}>{label}</p>
       <p className={`text-2xl font-bold ${color}`}>{value}</p>
     </div>
   </div>
@@ -49,16 +49,16 @@ const DashboardScreen: React.FC = () => {
     .slice(0, 8)
 
   return (
-    <div className="h-full overflow-y-auto p-6 space-y-6">
+    <div className="h-full overflow-y-auto p-6 space-y-6" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-100">Gösterge Paneli</h1>
-          <p className="text-sm text-slate-400">Merkezi Sismik Ağ</p>
+          <h1 className="text-xl font-bold">Gösterge Paneli</h1>
+          <p className="text-sm" style={{ color: 'var(--text-2)' }}>Merkezi Sismik Ağ</p>
         </div>
         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${
           isConnected
-            ? 'bg-green-900/30 border-green-700 text-green-400'
-            : 'bg-red-900/30 border-red-700 text-red-400'
+            ? 'bg-green-900/20 border-green-700/50 text-green-400'
+            : 'bg-red-900/20 border-red-700/50 text-red-400'
         }`}>
           {isConnected ? <Wifi size={14} /> : <WifiOff size={14} />}
           {isConnected ? 'Bağlı' : 'Bağlantı Yok'}
@@ -73,42 +73,42 @@ const DashboardScreen: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="bg-slate-800 rounded-xl border border-slate-700">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-700">
+        <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
             <AlertTriangle size={16} className="text-red-400" />
-            <h2 className="font-semibold text-slate-100">Son Uyarılar</h2>
+            <h2 className="font-semibold">Son Uyarılar</h2>
           </div>
-          <div className="divide-y divide-slate-700">
+          <div>
             {recentAlerts.length === 0 ? (
-              <p className="text-center text-slate-500 py-8 text-sm">Uyarı yok</p>
+              <p className="text-center py-8 text-sm" style={{ color: 'var(--text-3)' }}>Uyarı yok</p>
             ) : recentAlerts.map((a, i) => (
-              <div key={i} className="flex items-start gap-3 px-4 py-3">
+              <div key={i} className="flex items-start gap-3 px-4 py-3 border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
                 <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${PRIORITY_COLOR[a.priority] || 'bg-slate-500'}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-slate-200 leading-snug">{a.message}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{timeAgo(a.timestamp)} önce</p>
+                  <p className="text-sm leading-snug">{a.message}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{timeAgo(a.timestamp)} önce</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="bg-slate-800 rounded-xl border border-slate-700">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-700">
+        <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
             <Activity size={16} className="text-blue-400" />
-            <h2 className="font-semibold text-slate-100">Son Depremler</h2>
+            <h2 className="font-semibold">Son Depremler</h2>
           </div>
-          <div className="divide-y divide-slate-700">
+          <div>
             {recentQuakes.length === 0 ? (
-              <p className="text-center text-slate-500 py-8 text-sm">Veri yükleniyor...</p>
+              <p className="text-center py-8 text-sm" style={{ color: 'var(--text-3)' }}>Veri yükleniyor...</p>
             ) : recentQuakes.map(q => (
-              <div key={q.id} className="flex items-center gap-3 px-4 py-3">
+              <div key={q.id} className="flex items-center gap-3 px-4 py-3 border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
                 <span className={`text-lg font-bold w-10 text-right shrink-0 ${getMagColor(q.magnitude)}`}>
                   {q.magnitude.toFixed(1)}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-slate-200 truncate">{q.place || 'Konum bilinmiyor'}</p>
-                  <p className="text-xs text-slate-500">{timeAgo(q.timestamp)} · {q.source}</p>
+                  <p className="text-sm truncate">{q.place || 'Konum bilinmiyor'}</p>
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>{timeAgo(q.timestamp)} · {q.source}</p>
                 </div>
               </div>
             ))}

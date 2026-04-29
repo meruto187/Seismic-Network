@@ -57,13 +57,14 @@ const QuakeListScreen: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="p-4 border-b border-slate-700 space-y-3">
+    <div className="h-full flex flex-col" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
+      <div className="p-4 space-y-3 border-b" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
         <div className="flex items-center gap-3">
           <div className="relative flex-1">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-3)' }} />
             <input
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+              className="w-full rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none"
+              style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', color: 'var(--text)' }}
               placeholder="Konum ara..."
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -71,7 +72,8 @@ const QuakeListScreen: React.FC = () => {
           </div>
           <button
             onClick={handleRefresh}
-            className="p-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-400 hover:text-slate-100 transition-colors"
+            className="p-2 rounded-lg border transition-colors"
+            style={{ background: 'var(--surface-2)', borderColor: 'var(--border-2)', color: 'var(--text-2)' }}
           >
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
           </button>
@@ -82,21 +84,21 @@ const QuakeListScreen: React.FC = () => {
             <button
               key={f}
               onClick={() => setTimeFilter(f)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                timeFilter === f
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-              }`}
+              className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
+              style={timeFilter === f
+                ? { background: '#3b82f6', color: '#fff' }
+                : { background: 'var(--surface-2)', color: 'var(--text-2)' }}
             >
               {f === 'all' ? 'Hepsi' : f === '24h' ? '24 Saat' : f === '7d' ? '7 Gün' : '30 Gün'}
             </button>
           ))}
-          <div className="w-px h-4 bg-slate-700" />
+          <div className="w-px h-4" style={{ background: 'var(--border)' }} />
           <button
             onClick={() => setSourceFilter(null)}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              !sourceFilter ? 'bg-slate-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-            }`}
+            className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
+            style={!sourceFilter
+              ? { background: 'var(--surface-3)', color: 'var(--text)' }
+              : { background: 'var(--surface-2)', color: 'var(--text-2)' }}
           >
             Tümü
           </button>
@@ -104,36 +106,40 @@ const QuakeListScreen: React.FC = () => {
             <button
               key={s}
               onClick={() => setSourceFilter(sourceFilter === s ? null : s)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                sourceFilter === s ? 'bg-slate-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-              }`}
+              className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
+              style={sourceFilter === s
+                ? { background: 'var(--surface-3)', color: 'var(--text)' }
+                : { background: 'var(--surface-2)', color: 'var(--text-2)' }}
             >
               {s}
             </button>
           ))}
         </div>
 
-        <p className="text-xs text-slate-500">{filtered.length} deprem (min M{settings.minMagnitude})</p>
+        <p className="text-xs" style={{ color: 'var(--text-3)' }}>{filtered.length} deprem (min M{settings.minMagnitude})</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto divide-y divide-slate-800">
+      <div className="flex-1 overflow-y-auto" style={{ background: 'var(--bg)' }}>
         {filtered.map(q => (
           <div
             key={q.id}
             onClick={() => selectEvent(q)}
-            className="flex items-center gap-4 px-4 py-3 hover:bg-slate-800 cursor-pointer transition-colors group"
+            className="flex items-center gap-4 px-4 py-3 cursor-pointer transition-colors group border-b"
+            style={{ borderColor: 'var(--border)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
             <div className={`w-12 h-12 rounded-xl ${getMagColor(q.magnitude)} flex items-center justify-center shrink-0`}>
               <span className="text-white font-bold text-lg leading-none">{q.magnitude.toFixed(1)}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-200 truncate">{q.place || 'Konum bilinmiyor'}</p>
+              <p className="text-sm font-medium truncate">{q.place || 'Konum bilinmiyor'}</p>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-xs text-slate-500">{timeAgo(q.timestamp)}</span>
-                <span className="text-slate-700">·</span>
-                <span className="text-xs text-slate-500">{Math.abs(q.depth_km).toFixed(0)} km derinlik</span>
-                <span className="text-slate-700">·</span>
-                <span className="text-xs bg-slate-700 text-slate-300 px-1.5 rounded">{q.source}</span>
+                <span className="text-xs" style={{ color: 'var(--text-3)' }}>{timeAgo(q.timestamp)}</span>
+                <span style={{ color: 'var(--border-2)' }}>·</span>
+                <span className="text-xs" style={{ color: 'var(--text-3)' }}>{Math.abs(q.depth_km).toFixed(0)} km</span>
+                <span style={{ color: 'var(--border-2)' }}>·</span>
+                <span className="text-xs px-1.5 rounded" style={{ background: 'var(--surface-3)', color: 'var(--text-2)' }}>{q.source}</span>
               </div>
             </div>
             {q.url && (
@@ -142,7 +148,8 @@ const QuakeListScreen: React.FC = () => {
                 onClick={e => e.stopPropagation()}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded text-slate-400 hover:text-slate-100"
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded"
+                style={{ color: 'var(--text-2)' }}
               >
                 <ExternalLink size={14} />
               </a>
@@ -150,7 +157,7 @@ const QuakeListScreen: React.FC = () => {
           </div>
         ))}
         {filtered.length === 0 && (
-          <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+          <div className="flex items-center justify-center h-full text-sm" style={{ color: 'var(--text-3)' }}>
             Deprem bulunamadı
           </div>
         )}
