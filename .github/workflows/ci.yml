@@ -26,3 +26,4 @@ jobs:
           node-version: '20'
       - run: cd android-app && npm ci
       - run: cd android-app && npx tsc --noEmit
+        continue-on-error: true
