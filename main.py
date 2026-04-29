@@ -1,12 +1,14 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Request, Header
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set
 import json
 import logging
 import asyncio
+import time
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 
 from config import config
@@ -54,6 +56,24 @@ manager = ConnectionManager()
 
 koeri_sync = KOERISync()
 afad_sync = AFADSync()
+
+banned_devices: Set[str] = set()
+chat_history: deque = deque(maxlen=200)
+ws_message_times: Dict[str, deque] = defaultdict(lambda: deque(maxlen=config.WS_RATE_LIMIT_PER_SECOND))
+
+def require_admin(x_admin_key: Optional[str] = Header(None)):
+    if x_admin_key != config.ADMIN_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+    return True
+
+def ws_rate_ok(device_id: str) -> bool:
+    now = time.monotonic()
+    times = ws_message_times[device_id]
+    times.append(now)
+    one_sec_ago = now - 1.0
+    recent = [t for t in times if t > one_sec_ago]
+    ws_message_times[device_id] = deque(recent, maxlen=config.WS_RATE_LIMIT_PER_SECOND)
+    return len(recent) <= config.WS_RATE_LIMIT_PER_SECOND
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -134,6 +154,9 @@ async def event_detection_loop():
 
 @app.websocket("/ws/sensor/{device_id}")
 async def websocket_endpoint(websocket: WebSocket, device_id: str):
+    if device_id in banned_devices:
+        await websocket.close(code=4003, reason="Device banned")
+        return
     await manager.connect(device_id, websocket)
     
     db = SessionLocal()
@@ -150,15 +173,27 @@ async def websocket_endpoint(websocket: WebSocket, device_id: str):
         
         while True:
             try:
-                data = await websocket.receive_json()
+                raw = await websocket.receive_text()
+                if len(raw) > config.WS_MAX_MESSAGE_BYTES:
+                    continue
+                if not ws_rate_ok(device_id):
+                    logger.warning(f"Rate limit exceeded: {device_id}")
+                    continue
+                if device_id in banned_devices:
+                    await websocket.close(code=4003, reason="Device banned")
+                    break
+                data = json.loads(raw)
                 
                 if data.get('type') == 'chat':
-                    await manager.broadcast({
+                    msg = {
                         'type': 'chat',
                         'device_id': device_id,
                         'text': str(data.get('text', ''))[:300],
                         'timestamp': data.get('timestamp', datetime.utcnow().isoformat()),
-                    })
+                        'id': f"{device_id}_{int(time.time()*1000)}",
+                    }
+                    chat_history.append(msg)
+                    await manager.broadcast(msg)
                     continue
                 
                 timestamp = datetime.fromisoformat(data['timestamp']) if 'timestamp' in data else datetime.utcnow()
@@ -264,194 +299,496 @@ async def api_root():
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
-    return """
-<!DOCTYPE html>
+    return """<!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SismoNetwork Panel</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <style>
-    body { margin: 0; font-family: Inter, Arial, sans-serif; background: #081226; color: #e2e8f0; }
-    .shell { padding: 20px; display: grid; gap: 16px; }
-    .hero { background: linear-gradient(135deg, #0f172a, #172554); border: 1px solid #1e293b; border-radius: 20px; padding: 20px; }
-    .hero h1 { margin: 0 0 8px; font-size: 28px; }
-    .hero p { margin: 0; color: #cbd5e1; }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-    .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 18px; padding: 16px; }
-    .metric { font-size: 30px; font-weight: 700; margin-top: 10px; }
-    .label { color: #93c5fd; font-size: 13px; }
-    .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
-    #map { height: 520px; width: 100%; border-radius: 18px; }
-    .panel-title { margin: 0 0 12px; font-size: 18px; }
-    .list { display: grid; gap: 10px; max-height: 520px; overflow: auto; }
-    .item { background: #111c33; border-radius: 14px; padding: 12px; border-left: 4px solid #2563eb; }
-    .item strong { display: block; margin-bottom: 6px; }
-    .muted { color: #94a3b8; font-size: 13px; }
-    .badge { display: inline-flex; align-items: center; gap: 8px; background: #111827; border: 1px solid #334155; border-radius: 999px; padding: 8px 12px; margin-top: 14px; }
-    .dot { width: 10px; height: 10px; border-radius: 999px; background: #22c55e; }
-    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } #map { height: 380px; } }
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SismoNetwork Admin</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#07101f;--surface:#0d1b2e;--card:#111f35;--border:#1a2f4a;--text:#e2e8f0;--text2:#94a3b8;--text3:#4a6080;--accent:#3b82f6;--red:#ef4444;--orange:#f97316;--green:#22c55e;--yellow:#eab308}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
+
+/* LOGIN */
+#login-overlay{position:fixed;inset:0;background:#07101fef;display:flex;align-items:center;justify-content:center;z-index:9999}
+.login-box{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:36px 32px;width:340px;display:flex;flex-direction:column;gap:16px}
+.login-box h2{font-size:20px;font-weight:700}
+.login-box p{color:var(--text2);font-size:13px}
+.login-box input{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px;width:100%;outline:none}
+.login-box input:focus{border-color:var(--accent)}
+.login-box button{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:600;cursor:pointer}
+.login-err{color:var(--red);font-size:12px;display:none}
+
+/* LAYOUT */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.topbar-logo{width:32px;height:32px;background:var(--red);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.topbar h1{font-size:16px;font-weight:700}
+.live-badge{display:flex;align-items:center;gap:6px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:999px;padding:4px 10px;font-size:12px;color:var(--green)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.tabs{display:flex;gap:4px;padding:0 24px;background:var(--surface);border-bottom:1px solid var(--border)}
+.tab{padding:10px 16px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:500;border-bottom:2px solid transparent;transition:all .15s}
+.tab.active{color:var(--text);border-bottom-color:var(--accent)}
+.tab-content{display:none;padding:20px 24px}
+.tab-content.active{display:block}
+
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
+.stat-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.stat-val{font-size:28px;font-weight:800}
+.stat-sub{font-size:11px;color:var(--text3);margin-top:4px}
+
+/* GRID */
+.grid2{display:grid;grid-template-columns:1.5fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+@media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.panel-head{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.panel-head h3{font-size:14px;font-weight:600}
+.panel-body{padding:12px;max-height:420px;overflow-y:auto}
+
+/* MAP */
+#map{height:460px;border-radius:0}
+
+/* ITEMS */
+.item{border-radius:10px;padding:10px 12px;background:var(--surface);border-left:3px solid var(--accent);margin-bottom:8px;font-size:13px}
+.item:last-child{margin-bottom:0}
+.item-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.item-title{font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item-meta{font-size:11px;color:var(--text2);margin-top:3px}
+.badge-pill{display:inline-block;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600}
+.empty{color:var(--text3);text-align:center;padding:24px;font-size:13px}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.btn:hover{opacity:.8}
+.btn-sm{padding:3px 8px;font-size:11px;border-radius:6px}
+.btn-red{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.btn-orange{background:rgba(249,115,22,.15);color:var(--orange);border:1px solid rgba(249,115,22,.3)}
+.btn-green{background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.btn-blue{background:rgba(59,130,246,.15);color:var(--accent);border:1px solid rgba(59,130,246,.3)}
+
+/* CHAT */
+.chat-wrap{display:flex;flex-direction:column;height:460px}
+.chat-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.chat-msg{background:var(--surface);border-radius:10px;padding:8px 12px;font-size:13px}
+.chat-msg-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.chat-device{font-size:11px;font-weight:700;color:var(--accent)}
+.chat-time{font-size:10px;color:var(--text3);margin-left:auto}
+.chat-text{color:var(--text)}
+.chat-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 4px;opacity:0;transition:opacity .15s}
+.chat-msg:hover .chat-del{opacity:1}
+.chat-msg.deleted{opacity:.3;text-decoration:line-through}
+.chat-input-row{display:flex;gap:8px;padding:12px;border-top:1px solid var(--border)}
+.chat-input-row input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;outline:none}
+
+/* NOTIFY */
+#toast{position:fixed;bottom:24px;right:24px;background:#1e293b;border:1px solid var(--border);border-radius:12px;padding:12px 18px;font-size:13px;z-index:9998;opacity:0;transition:opacity .3s;pointer-events:none}
+#toast.show{opacity:1}
+</style>
 </head>
 <body>
-  <div class="shell">
-    <section class="hero">
-      <h1>SismoNetwork Kontrol Paneli</h1>
-      <p>Telefonlardan gelen sensör akışı, aktif cihazlar, yerel olaylar ve uyarılar tek panelde izlenir.</p>
-      <div class="badge"><span class="dot"></span><span id="connection-state">Canlı veri paneli hazır</span></div>
-    </section>
-    <section class="stats">
-      <div class="card"><div class="label">Aktif Cihaz</div><div class="metric" id="active-devices">0</div></div>
-      <div class="card"><div class="label">Canlı Sarsıntı</div><div class="metric" id="live-motion">0.000</div></div>
-      <div class="card"><div class="label">Aktif Uyarı</div><div class="metric" id="alert-count">0</div></div>
-      <div class="card"><div class="label">Son Güncelleme</div><div class="metric" id="latest-sample-age">-</div></div>
-    </section>
-    <section class="grid">
-      <div class="card">
-        <h2 class="panel-title">Harita</h2>
+
+<div id="login-overlay">
+  <div class="login-box">
+    <div style="font-size:28px">🌍</div>
+    <h2>SismoNetwork Admin</h2>
+    <p>Yönetim paneline erişmek için admin anahtarını girin.</p>
+    <input id="key-input" type="password" placeholder="Admin anahtarı..." />
+    <div class="login-err" id="login-err">Hatalı anahtar. Tekrar deneyin.</div>
+    <button onclick="doLogin()">Giriş Yap</button>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo">🌐</div>
+      <h1>SismoNetwork Admin</h1>
+    </div>
+    <div class="live-badge"><span class="dot"></span><span id="ws-count">0 bağlantı</span></div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('overview')">Genel Bakış</div>
+    <div class="tab" onclick="switchTab('devices')">Cihazlar</div>
+    <div class="tab" onclick="switchTab('alerts')">Uyarılar</div>
+    <div class="tab" onclick="switchTab('chat')">Sohbet</div>
+    <div class="tab" onclick="switchTab('events')">Olaylar</div>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="tab-content active" id="tab-overview">
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-label">Aktif Cihaz</div><div class="stat-val" id="s-devices">—</div></div>
+      <div class="stat-card"><div class="stat-label">WS Bağlantısı</div><div class="stat-val" id="s-ws">—</div></div>
+      <div class="stat-card"><div class="stat-label">Aktif Uyarı</div><div class="stat-val" id="s-alerts" style="color:var(--red)">—</div></div>
+      <div class="stat-card"><div class="stat-label">Canlı Sarsıntı</div><div class="stat-val" id="s-motion">—</div></div>
+      <div class="stat-card"><div class="stat-label">Son Örnek</div><div class="stat-val" id="s-age" style="font-size:20px">—</div></div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-head"><h3>Canlı Harita</h3></div>
         <div id="map"></div>
       </div>
-      <div class="card">
-        <h2 class="panel-title">Son Uyarılar</h2>
-        <div class="list" id="alerts-list"></div>
+      <div class="panel">
+        <div class="panel-head"><h3>Son Uyarılar</h3></div>
+        <div class="panel-body" id="ov-alerts"></div>
       </div>
-    </section>
-    <section class="grid">
-      <div class="card">
-        <h2 class="panel-title">Bağlı Cihazlar</h2>
-        <div class="list" id="devices-list"></div>
-      </div>
-      <div class="card">
-        <h2 class="panel-title">Yerel / Global Olaylar</h2>
-        <div class="list" id="events-list"></div>
-      </div>
-    </section>
+    </div>
   </div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script>
-    const map = L.map('map').setView([39.0, 35.0], 5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap'
-    }).addTo(map);
 
-    let deviceMarkers = [];
-    let eventMarkers = [];
+  <!-- DEVICES -->
+  <div class="tab-content" id="tab-devices">
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Bağlı &amp; Kayıtlı Cihazlar</h3>
+        <span id="banned-count" class="badge-pill" style="background:rgba(239,68,68,.1);color:var(--red)"></span>
+      </div>
+      <div class="panel-body" style="max-height:none" id="dev-list"></div>
+    </div>
+  </div>
 
-    function clearMarkers(markers) {
-      markers.forEach(marker => map.removeLayer(marker));
-      markers.length = 0;
-    }
+  <!-- ALERTS -->
+  <div class="tab-content" id="tab-alerts">
+    <div class="panel">
+      <div class="panel-head"><h3>Tüm Uyarılar</h3></div>
+      <div class="panel-body" style="max-height:none" id="all-alerts"></div>
+    </div>
+  </div>
 
-    function renderList(elementId, items, renderItem) {
-      const el = document.getElementById(elementId);
-      if (!items.length) {
-        el.innerHTML = '<div class="muted">Henüz veri yok</div>';
-        return;
+  <!-- CHAT -->
+  <div class="tab-content" id="tab-chat">
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Sohbet Moderasyonu</h3>
+        <button class="btn btn-red btn-sm" onclick="clearAllChat()">Tümünü Temizle</button>
+      </div>
+      <div class="chat-wrap">
+        <div class="chat-msgs" id="chat-msgs"></div>
+        <div class="chat-input-row">
+          <input id="chat-in" placeholder="Admin olarak mesaj gönder..." onkeydown="if(event.key==='Enter')sendAdminChat()" />
+          <button class="btn btn-blue" onclick="sendAdminChat()">Gönder</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EVENTS -->
+  <div class="tab-content" id="tab-events">
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-head"><h3>Yerel Olaylar</h3></div>
+        <div class="panel-body" style="max-height:none" id="local-events"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Global Depremler</h3></div>
+        <div class="panel-body" style="max-height:none" id="global-events"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+let ADMIN_KEY = '';
+let map, deviceMarkers=[], eventMarkers=[];
+let bannedDevices = new Set();
+let chatWs = null;
+let currentTab = 'overview';
+
+function doLogin() {
+  const key = document.getElementById('key-input').value.trim();
+  if (!key) return;
+  fetch('/admin/ban', {headers:{'x-admin-key':key}})
+    .then(r => {
+      if (r.ok) {
+        ADMIN_KEY = key;
+        document.getElementById('login-overlay').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        initApp();
+      } else {
+        document.getElementById('login-err').style.display = 'block';
       }
-      el.innerHTML = items.map(renderItem).join('');
+    }).catch(() => { document.getElementById('login-err').style.display = 'block'; });
+}
+document.getElementById('key-input').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+function switchTab(name) {
+  currentTab = name;
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['overview','devices','alerts','chat','events'][i]===name));
+  document.querySelectorAll('.tab-content').forEach(tc => tc.classList.toggle('active', tc.id === 'tab-'+name));
+  if (name === 'chat') loadChat();
+}
+
+function adminFetch(url, opts={}) {
+  opts.headers = {...(opts.headers||{}), 'x-admin-key': ADMIN_KEY};
+  return fetch(url, opts);
+}
+
+function toast(msg, color='#22c55e') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.borderColor = color;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+function timeAgo(ts) {
+  const diff = Date.now() - new Date(ts).getTime();
+  const m = Math.floor(diff/60000);
+  if (m < 1) return 'şimdi';
+  if (m < 60) return m + ' dk önce';
+  const h = Math.floor(m/60);
+  if (h < 24) return h + ' sa önce';
+  return Math.floor(h/24) + ' gün önce';
+}
+
+function magColor(m) {
+  if (m >= 6) return '#ef4444';
+  if (m >= 4) return '#f97316';
+  if (m >= 2) return '#eab308';
+  return '#22c55e';
+}
+
+// MAP
+function initMap() {
+  map = L.map('map').setView([39, 35], 5);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {maxZoom:18,attribution:'&copy; OSM &copy; CARTO'}).addTo(map);
+}
+
+function updateMap(devices, events, live) {
+  deviceMarkers.forEach(m => map.removeLayer(m)); deviceMarkers = [];
+  eventMarkers.forEach(m => map.removeLayer(m)); eventMarkers = [];
+  (devices||[]).forEach(d => {
+    if (d.last_latitude == null) return;
+    const lv = (live.devices||[]).find(x => x.device_id===d.id);
+    const mag = Number(lv?.magnitude||0);
+    const c = mag>=2.2?'#ef4444':mag>=1.3?'#f97316':d.is_active?'#22c55e':'#64748b';
+    const m = L.circleMarker([d.last_latitude,d.last_longitude],{radius:Math.max(7,Math.min(20,7+mag*4)),fillColor:c,color:'#fff',weight:1,fillOpacity:.85})
+      .bindPopup(`<b>${d.id}</b><br>${d.region_id||'—'}<br>M: ${mag.toFixed(3)}`).addTo(map);
+    deviceMarkers.push(m);
+  });
+  (events.global_events||[]).forEach(ev => {
+    const m = L.circleMarker([ev.latitude,ev.longitude],{radius:6,fillColor:magColor(ev.magnitude),color:'#fff',weight:1,fillOpacity:.8})
+      .bindPopup(`<b>M${ev.magnitude}</b> ${ev.place||'—'}<br>${ev.source}`).addTo(map);
+    eventMarkers.push(m);
+  });
+}
+
+// LOAD
+async function loadOverview() {
+  try {
+    const [status, devices, alerts, events, live] = await Promise.all([
+      fetch('/status').then(r=>r.json()),
+      fetch('/devices?active_only=false').then(r=>r.json()),
+      fetch('/alerts?active_only=false&limit=15').then(r=>r.json()),
+      fetch('/events?event_type=all&limit=20').then(r=>r.json()),
+      fetch('/live-sensor-summary').then(r=>r.json()),
+    ]);
+    document.getElementById('s-devices').textContent = status.active_devices;
+    document.getElementById('s-ws').textContent = status.websocket_connections;
+    document.getElementById('s-alerts').textContent = status.active_alerts;
+    document.getElementById('s-motion').textContent = Number(live.max_magnitude||0).toFixed(3);
+    document.getElementById('s-age').textContent = live.latest_sample_age_seconds != null ? live.latest_sample_age_seconds+'s' : '—';
+    document.getElementById('ws-count').textContent = `${status.websocket_connections} bağlantı`;
+    updateMap(devices, events, live);
+    const ovA = document.getElementById('ov-alerts');
+    if (!alerts.length) { ovA.innerHTML = '<div class="empty">Aktif uyarı yok ✓</div>'; }
+    else ovA.innerHTML = alerts.map(a => `
+      <div class="item" style="border-left-color:${a.color||'#3b82f6'}">
+        <div class="item-row">
+          <span class="item-title">${a.alert_type}</span>
+          <span class="badge-pill" style="background:${a.is_active?'rgba(239,68,68,.15)':'rgba(100,116,139,.15)'}; color:${a.is_active?'var(--red)':'var(--text2)'}">${a.is_active?'Aktif':'Çözümlendi'}</span>
+          ${a.is_active ? `<button class="btn btn-green btn-sm" onclick="resolveAlert(${a.id})">Çöz</button>` : ''}
+        </div>
+        <div class="item-meta">${a.message}</div>
+        <div class="item-meta">${timeAgo(a.timestamp)}</div>
+      </div>`).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function loadDevices() {
+  const [devices, live, banned] = await Promise.all([
+    fetch('/devices?active_only=false').then(r=>r.json()),
+    fetch('/live-sensor-summary').then(r=>r.json()),
+    adminFetch('/admin/ban').then(r=>r.json()),
+  ]);
+  bannedDevices = new Set(banned.banned_devices||[]);
+  document.getElementById('banned-count').textContent = bannedDevices.size ? `${bannedDevices.size} yasaklı` : '';
+  const el = document.getElementById('dev-list');
+  if (!devices.length) { el.innerHTML = '<div class="empty">Kayıtlı cihaz yok</div>'; return; }
+  el.innerHTML = devices.map(d => {
+    const lv = (live.devices||[]).find(x=>x.device_id===d.id);
+    const mag = Number(lv?.magnitude||0);
+    const isBanned = bannedDevices.has(d.id);
+    return `<div class="item" style="border-left-color:${isBanned?'var(--red)':d.is_active?'var(--green)':'var(--text3)'}">
+      <div class="item-row">
+        <span class="item-title" style="${isBanned?'text-decoration:line-through;color:var(--red)':''}">${d.id}</span>
+        <span class="badge-pill" style="background:${d.is_active?'rgba(34,197,94,.1)':'rgba(100,116,139,.1)'};color:${d.is_active?'var(--green)':'var(--text2)'}">${d.is_active?'Aktif':'Pasif'}</span>
+        ${isBanned ? `<button class="btn btn-green btn-sm" onclick="unbanDevice('${d.id}')">Yasağı Kaldır</button>` :
+          `<button class="btn btn-orange btn-sm" onclick="kickDevice('${d.id}')">Kick</button>
+           <button class="btn btn-red btn-sm" onclick="banDevice('${d.id}')">Ban</button>`}
+      </div>
+      <div class="item-meta">${d.region_id||'Bölge yok'} · M: ${mag.toFixed(3)} · ${d.last_latitude!=null?d.last_latitude.toFixed(4)+', '+d.last_longitude.toFixed(4):'Konum yok'}</div>
+      <div class="item-meta">Son: ${timeAgo(d.last_seen)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function loadAllAlerts() {
+  const alerts = await fetch('/alerts?active_only=false&limit=100').then(r=>r.json());
+  const el = document.getElementById('all-alerts');
+  if (!alerts.length) { el.innerHTML = '<div class="empty">Uyarı yok</div>'; return; }
+  el.innerHTML = alerts.map(a => `
+    <div class="item" style="border-left-color:${a.color||'#3b82f6'}">
+      <div class="item-row">
+        <span class="item-title">${a.alert_type}</span>
+        <span class="badge-pill" style="background:${a.is_active?'rgba(239,68,68,.15)':'rgba(100,116,139,.15)'};color:${a.is_active?'var(--red)':'var(--text2)'}">${a.priority}</span>
+        ${a.is_active?`<button class="btn btn-green btn-sm" onclick="resolveAlert(${a.id})">Çöz</button>`:''}
+      </div>
+      <div class="item-meta">${a.message}</div>
+      <div class="item-meta">${new Date(a.timestamp).toLocaleString('tr-TR')}</div>
+    </div>`).join('');
+}
+
+async function loadChat() {
+  const data = await adminFetch('/admin/chat?limit=100').then(r=>r.json());
+  const el = document.getElementById('chat-msgs');
+  el.innerHTML = '';
+  (data.messages||[]).forEach(m => appendChatMsg(m));
+  el.scrollTop = el.scrollHeight;
+  if (!chatWs) connectChatWs();
+}
+
+async function loadEvents() {
+  const events = await fetch('/events?event_type=all&limit=50').then(r=>r.json());
+  const le = document.getElementById('local-events');
+  const ge = document.getElementById('global-events');
+  const local = events.local_events||[];
+  const global = events.global_events||[];
+  le.innerHTML = !local.length ? '<div class="empty">Yerel olay yok</div>' :
+    local.map(e=>`<div class="item" style="border-left-color:var(--yellow)">
+      <div class="item-row"><span class="item-title">${e.region||'Bilinmiyor'}</span><span class="badge-pill" style="background:rgba(234,179,8,.1);color:var(--yellow)">${e.status}</span></div>
+      <div class="item-meta">${e.device_count} cihaz · Avg M ${Number(e.avg_magnitude||0).toFixed(2)} · Max M ${Number(e.max_magnitude||0).toFixed(2)}</div>
+      <div class="item-meta">${timeAgo(e.timestamp)}</div>
+    </div>`).join('');
+  ge.innerHTML = !global.length ? '<div class="empty">Global deprem yok</div>' :
+    global.map(e=>`<div class="item" style="border-left-color:${magColor(e.magnitude)}">
+      <div class="item-row"><span class="item-title">${e.place||'Bilinmiyor'}</span><span class="badge-pill" style="background:${magColor(e.magnitude)}22;color:${magColor(e.magnitude)}">M${e.magnitude}</span></div>
+      <div class="item-meta">${e.source} · ${Math.abs(e.depth_km||0).toFixed(0)} km derinlik</div>
+      <div class="item-meta">${timeAgo(e.timestamp)}</div>
+    </div>`).join('');
+}
+
+// ACTIONS
+async function resolveAlert(id) {
+  await adminFetch(`/alerts/${id}/resolve`,{method:'POST'});
+  toast('Uyarı çözümlendi');
+  if (currentTab==='alerts') loadAllAlerts(); else loadOverview();
+}
+
+async function banDevice(id) {
+  if (!confirm(`${id} cihazını ban'la?`)) return;
+  await adminFetch(`/admin/ban/${id}`,{method:'POST'});
+  toast(`${id} yasaklandı`, '#ef4444');
+  loadDevices();
+}
+
+async function unbanDevice(id) {
+  await adminFetch(`/admin/ban/${id}`,{method:'DELETE'});
+  toast(`${id} yasağı kaldırıldı`);
+  loadDevices();
+}
+
+async function kickDevice(id) {
+  await adminFetch(`/admin/kick/${id}`,{method:'POST'});
+  toast(`${id} kicked`,'#f97316');
+  loadDevices();
+}
+
+async function deleteMsg(msgId, el) {
+  await adminFetch(`/admin/chat/${msgId}`,{method:'DELETE'});
+  el.classList.add('deleted');
+  toast('Mesaj silindi','#f97316');
+}
+
+async function clearAllChat() {
+  if (!confirm('Tüm chat geçmişi silinsin mi?')) return;
+  const data = await adminFetch('/admin/chat?limit=200').then(r=>r.json());
+  await Promise.all((data.messages||[]).map(m => adminFetch(`/admin/chat/${m.id}`,{method:'DELETE'})));
+  document.getElementById('chat-msgs').innerHTML = '';
+  toast('Chat temizlendi','#f97316');
+}
+
+function appendChatMsg(m) {
+  const el = document.getElementById('chat-msgs');
+  const div = document.createElement('div');
+  div.className = 'chat-msg';
+  div.id = 'msg-'+m.id;
+  div.innerHTML = `
+    <div class="chat-msg-head">
+      <span class="chat-device">${m.device_id}</span>
+      <span class="chat-time">${timeAgo(m.timestamp)}</span>
+      <button class="chat-del" onclick="deleteMsg('${m.id}',this.closest('.chat-msg'))" title="Sil">🗑</button>
+    </div>
+    <div class="chat-text">${m.text.replace(/</g,'&lt;')}</div>`;
+  el.appendChild(div);
+}
+
+function connectChatWs() {
+  const wsUrl = location.protocol==='https:'?'wss://'+location.host:'ws://'+location.host;
+  chatWs = new WebSocket(wsUrl+'/ws/sensor/admin_dashboard');
+  chatWs.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type==='chat' && currentTab==='chat') {
+      appendChatMsg(msg);
+      const el = document.getElementById('chat-msgs');
+      el.scrollTop = el.scrollHeight;
     }
-
-    async function loadDashboard() {
-      const [status, devices, alerts, events, live] = await Promise.all([
-        fetch('/status').then(r => r.json()),
-        fetch('/devices?active_only=false').then(r => r.json()),
-        fetch('/alerts?active_only=false&limit=10').then(r => r.json()),
-        fetch('/events?event_type=all&limit=10').then(r => r.json()),
-        fetch('/live-sensor-summary').then(r => r.json()),
-      ]);
-
-      document.getElementById('active-devices').textContent = status.active_devices;
-      document.getElementById('live-motion').textContent = Number(live.max_magnitude || 0).toFixed(3);
-      document.getElementById('alert-count').textContent = status.active_alerts;
-      document.getElementById('latest-sample-age').textContent = live.latest_sample_age_seconds == null ? '-' : `${live.latest_sample_age_seconds}s`;
-      document.getElementById('connection-state').textContent = `${status.websocket_connections} websocket bağlantısı aktif`;
-
-      clearMarkers(deviceMarkers);
-      clearMarkers(eventMarkers);
-
-      const bounds = [];
-      devices.forEach(device => {
-        const liveDevice = (live.devices || []).find(item => item.device_id === device.id);
-        if (device.last_latitude != null && device.last_longitude != null) {
-          const magnitude = Number(liveDevice?.magnitude || 0);
-          const markerColor = magnitude >= 2.2 ? '#ef4444' : magnitude >= 1.3 ? '#f59e0b' : device.is_active ? '#22c55e' : '#94a3b8';
-          const markerRadius = Math.max(8, Math.min(22, 8 + magnitude * 5));
-          const marker = L.circleMarker([device.last_latitude, device.last_longitude], {
-            radius: markerRadius,
-            color: markerColor,
-            fillOpacity: 0.8,
-          }).addTo(map).bindPopup(`<strong>${device.id}</strong><br/>${device.region_id || 'Bölge yok'}<br/>Canlı büyüklük: ${magnitude.toFixed(3)}`);
-          deviceMarkers.push(marker);
-          bounds.push([device.last_latitude, device.last_longitude]);
-        }
-      });
-
-      (events.local_events || []).forEach(event => {
-        if (event.center_lat != null && event.center_lon != null) {
-          const marker = L.circle([event.center_lat, event.center_lon], {
-            radius: 15000,
-            color: '#f59e0b',
-            fillColor: '#f59e0b',
-            fillOpacity: 0.18,
-          }).addTo(map).bindPopup(`<strong>${event.status}</strong><br/>${event.region || 'Bölge bilinmiyor'}<br/>Cihaz: ${event.device_count}`);
-          eventMarkers.push(marker);
-          bounds.push([event.center_lat, event.center_lon]);
-        }
-      });
-
-      (events.global_events || []).forEach(event => {
-        const marker = L.circleMarker([event.latitude, event.longitude], {
-          radius: 7,
-          color: '#ef4444',
-          fillOpacity: 0.85,
-        }).addTo(map).bindPopup(`<strong>${event.source}</strong><br/>M ${event.magnitude} - ${event.place || 'Konum yok'}`);
-        eventMarkers.push(marker);
-        bounds.push([event.latitude, event.longitude]);
-      });
-
-      if (bounds.length) {
-        map.fitBounds(bounds, { padding: [30, 30] });
-      }
-
-      renderList('alerts-list', alerts, alert => `
-        <div class="item" style="border-left-color:${alert.color || '#2563eb'}">
-          <strong>${alert.alert_type}</strong>
-          <div>${alert.message}</div>
-          <div class="muted">${new Date(alert.timestamp).toLocaleString('tr-TR')}</div>
-        </div>
-      `);
-
-      renderList('devices-list', devices, device => `
-        <div class="item" style="border-left-color:${device.is_active ? '#22c55e' : '#64748b'}">
-          <strong>${device.id}</strong>
-          <div>${device.region_id || 'Bölge atanmadı'}</div>
-          <div class="muted">Canlı büyüklük: ${Number(((live.devices || []).find(item => item.device_id === device.id) || {}).magnitude || 0).toFixed(3)}</div>
-          <div class="muted">${device.last_latitude != null ? `${device.last_latitude.toFixed(5)}, ${device.last_longitude.toFixed(5)}` : 'Konum yok'}</div>
-        </div>
-      `);
-
-      const mixedEvents = [
-        ...(events.local_events || []).map(event => ({ ...event, source_label: 'Yerel' })),
-        ...(events.global_events || []).map(event => ({ ...event, source_label: event.source })),
-      ].slice(0, 12);
-
-      renderList('events-list', mixedEvents, event => `
-        <div class="item" style="border-left-color:${event.source_label === 'Yerel' ? '#f59e0b' : '#ef4444'}">
-          <strong>${event.source_label}</strong>
-          <div>${event.place || event.region || 'Konum yok'}</div>
-          <div class="muted">${event.magnitude ? `M ${event.magnitude}` : `Cihaz ${event.device_count || 0}`}</div>
-        </div>
-      `);
+    if (msg.type==='chat_delete') {
+      const target = document.getElementById('msg-'+msg.message_id);
+      if (target) target.classList.add('deleted');
     }
+  };
+  chatWs.onclose = () => { chatWs=null; setTimeout(connectChatWs, 3000); };
+}
 
-    loadDashboard();
-    setInterval(loadDashboard, 5000);
-  </script>
+function sendAdminChat() {
+  const inp = document.getElementById('chat-in');
+  const text = inp.value.trim();
+  if (!text || !chatWs || chatWs.readyState!==1) return;
+  chatWs.send(JSON.stringify({type:'chat',text:'[ADMIN] '+text,timestamp:new Date().toISOString()}));
+  inp.value = '';
+}
+
+// INIT
+function initApp() {
+  initMap();
+  loadOverview();
+  setInterval(() => {
+    if (currentTab==='overview') loadOverview();
+    if (currentTab==='devices') loadDevices();
+    if (currentTab==='alerts') loadAllAlerts();
+    if (currentTab==='events') loadEvents();
+  }, 5000);
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.addEventListener('click', () => {
+      const names = ['overview','devices','alerts','chat','events'];
+      if (names[i]==='devices') loadDevices();
+      if (names[i]==='alerts') loadAllAlerts();
+      if (names[i]==='events') loadEvents();
+    });
+  });
+}
+</script>
 </body>
-</html>
-    """
+</html>"""
 
 @app.get("/status")
 async def get_status(db: Session = Depends(get_db)):
@@ -642,6 +979,53 @@ async def resolve_alert(alert_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     return {"status": "resolved", "alert_id": alert_id}
+
+@app.get("/admin/chat", dependencies=[Depends(require_admin)])
+async def get_chat_history(limit: int = 100):
+    msgs = list(chat_history)[-limit:]
+    return {"messages": msgs, "total": len(chat_history)}
+
+@app.delete("/admin/chat/{message_id}", dependencies=[Depends(require_admin)])
+async def delete_chat_message(message_id: str):
+    before = len(chat_history)
+    remaining = [m for m in chat_history if m.get("id") != message_id]
+    chat_history.clear()
+    chat_history.extend(remaining)
+    deleted = before - len(chat_history)
+    await manager.broadcast({"type": "chat_delete", "message_id": message_id})
+    return {"deleted": deleted, "message_id": message_id}
+
+@app.post("/admin/ban/{device_id}", dependencies=[Depends(require_admin)])
+async def ban_device(device_id: str):
+    banned_devices.add(device_id)
+    if device_id in manager.active_connections:
+        try:
+            await manager.active_connections[device_id].close(code=4003, reason="Banned by admin")
+        except Exception:
+            pass
+        manager.disconnect(device_id)
+    logger.warning(f"Device banned by admin: {device_id}")
+    return {"banned": device_id}
+
+@app.delete("/admin/ban/{device_id}", dependencies=[Depends(require_admin)])
+async def unban_device(device_id: str):
+    banned_devices.discard(device_id)
+    return {"unbanned": device_id}
+
+@app.get("/admin/ban", dependencies=[Depends(require_admin)])
+async def list_banned():
+    return {"banned_devices": list(banned_devices)}
+
+@app.post("/admin/kick/{device_id}", dependencies=[Depends(require_admin)])
+async def kick_device(device_id: str):
+    if device_id in manager.active_connections:
+        try:
+            await manager.active_connections[device_id].close(code=4000, reason="Kicked by admin")
+        except Exception:
+            pass
+        manager.disconnect(device_id)
+        return {"kicked": device_id}
+    return {"detail": "Device not connected"}
 
 if __name__ == "__main__":
     import uvicorn

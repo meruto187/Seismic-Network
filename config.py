@@ -57,4 +57,9 @@ class Config:
     
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
+    ADMIN_KEY: str = os.getenv("ADMIN_KEY", "changeme-admin-key-2025")
+
+    WS_RATE_LIMIT_PER_SECOND: int = 5
+    WS_MAX_MESSAGE_BYTES: int = 4096
+
 config = Config()
