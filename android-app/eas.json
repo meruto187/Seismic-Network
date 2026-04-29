@@ -13,6 +13,16 @@
         "buildType": "apk"
       }
     },
+    "local": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://seismic.meruto.com.tr"
+      }
+    },
     "production": {
       "android": {
         "buildType": "app-bundle"

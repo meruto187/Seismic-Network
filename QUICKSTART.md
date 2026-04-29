@@ -176,6 +176,45 @@ GEOFENCING_RADIUS_KM = 100.0  # Varsayılan: 50.0
 - **Tespit gecikmesi**: < 1 saniye
 - **GlobalQuake sync**: Her 30 saniyede bir
 
+## 📱 Android APK Build
+
+### Gereksinimler
+- Node.js 18+, `eas-cli` (`npm install -g eas-cli`)
+- Expo hesabı (ücretsiz) — `eas login`
+- **Veya** local build için Android SDK + JDK 17
+
+### EAS Cloud Build (Önerilen)
+```bash
+cd android-app
+npx expo install          # bağımlılıkları yükle
+eas build -p android --profile preview   # APK üretir, ~15 dk
+```
+
+### Local Build (Expo Hesabı Gerekmez)
+```bash
+cd android-app
+npx expo prebuild --platform android    # native kod üretir
+cd android && ./gradlew assembleRelease  # APK: android/app/build/outputs/apk/release/
+```
+
+### APK Kurulumu (Cihaza)
+```bash
+adb install android/app/build/outputs/apk/release/app-release.apk
+```
+
+---
+
+## 🖥️ Electron Masaüstü İstemcisi
+
+```bash
+cd electron-app
+npm install
+npm run dev       # geliştirme modu
+npm run build     # dağıtım paketi
+```
+
+---
+
 ## 🎯 Sonraki Adımlar
 
 1. Mobil uygulama geliştirin (React Native, Flutter, vb.)

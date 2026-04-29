@@ -21,7 +21,9 @@ const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) =
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
-const QuakeCard = ({ event, userLat, userLon, onPress }: { event: GlobalEvent; userLat?: number; userLon?: number; onPress: () => void }) => {
+const CARD_HEIGHT = 96;
+
+const QuakeCard = React.memo(({ event, userLat, userLon, onPress }: { event: GlobalEvent; userLat?: number; userLon?: number; onPress: () => void }) => {
   const theme = useTheme();
   const magColor = getMagnitudeColor(event.magnitude);
   const distance = userLat != null && userLon != null
@@ -75,7 +77,7 @@ const QuakeCard = ({ event, userLat, userLon, onPress }: { event: GlobalEvent; u
       </Card>
     </TouchableOpacity>
   );
-};
+});
 
 type TimeFilter = '24h' | '7d' | '30d' | 'all';
 
@@ -97,7 +99,7 @@ const QuakeListScreen = () => {
     setRefreshing(false);
   }, [refreshEvents]);
 
-  const getTimeFilterMs = () => {
+  const getTimeFilterMs = useCallback(() => {
     const now = Date.now();
     switch (timeFilter) {
       case '24h': return now - 24 * 60 * 60 * 1000;
@@ -105,7 +107,7 @@ const QuakeListScreen = () => {
       case '30d': return now - 30 * 24 * 60 * 60 * 1000;
       default: return 0;
     }
-  };
+  }, [timeFilter]);
 
   const filtered = useMemo(() => {
     const timeThreshold = getTimeFilterMs();
@@ -117,10 +119,19 @@ const QuakeListScreen = () => {
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [globalEvents, search, filterSource, settings.minMagnitude, timeFilter]);
 
-  const openDetail = (event: GlobalEvent) => {
+  const openDetail = useCallback((event: GlobalEvent) => {
     setSelectedEvent(event);
     setModalVisible(true);
-  };
+  }, []);
+
+  const renderItem = useCallback(({ item }: { item: GlobalEvent }) => (
+    <QuakeCard
+      event={item}
+      userLat={userLocation?.lat}
+      userLon={userLocation?.lon}
+      onPress={() => openDetail(item)}
+    />
+  ), [userLocation, openDetail]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -184,14 +195,12 @@ const QuakeListScreen = () => {
         <FlatList
           data={filtered}
           keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <QuakeCard
-              event={item}
-              userLat={userLocation?.lat}
-              userLon={userLocation?.lon}
-              onPress={() => openDetail(item)}
-            />
-          )}
+          renderItem={renderItem}
+          getItemLayout={(_data, index) => ({ length: CARD_HEIGHT, offset: CARD_HEIGHT * index, index })}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews
           contentContainerStyle={{ padding: 12, paddingTop: 4 }}
           ListHeaderComponent={
             <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
